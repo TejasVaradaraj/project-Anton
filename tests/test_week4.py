@@ -11,7 +11,7 @@ from fake_vllm import FakeVllm
 
 from project_anton.analysis.kv_math import ModelShape
 from project_anton.analysis.tiers import compare_tiers, load_run, summarize_tier
-from project_anton.correctness.compare import compare_runs
+from project_anton.correctness.compare import compare_runs, self_check
 from project_anton.harness.runlog import read_jsonl
 from project_anton.harness.server import ServerConfig, load_server_config
 from project_anton.harness.storage import JOBS, fio_command, parse_fio
@@ -224,6 +224,17 @@ def test_logprob_drift_is_measured_per_phase():
     assert report["max_logprob_diff"] == pytest.approx(0.25)
     assert report["by_phase"]["fresh"]["max_logprob_diff"] == 0
     assert report["by_phase"]["evicted"]["max_logprob_diff"] == pytest.approx(0.25)
+
+
+def test_self_check_catches_output_changed_by_a_restore():
+    run = [
+        result(phase="fresh"),
+        result(phase="cached"),
+        result(phase="evicted", tokens=("WRONG", "b")),
+    ]
+    report = self_check(run)
+    assert report["cached"] == {"n": 1, "token_mismatches": 0, "first_token_mismatches": 0}
+    assert report["evicted"] == {"n": 1, "token_mismatches": 1, "first_token_mismatches": 1}
 
 
 def test_requests_missing_from_baseline_are_not_compared():

@@ -98,6 +98,32 @@ def compare_runs(baseline: list[dict], other: list[dict]) -> dict[str, Any]:
     }
 
 
+def self_check(run: list[dict]) -> dict[str, Any]:
+    """Compare each prompt's later requests with its first, within one server run.
+
+    This is the sharpest test: same server, same prompt, greedy decoding. Only the cache state
+    differs, so the answers should match without needing any noise floor.
+    """
+    fresh = {(r["length"], r["i"]): r for r in run if r["phase"] == "fresh"}
+    report: dict[str, Any] = {}
+    for r in run:
+        if r["phase"] == "fresh":
+            continue
+        base = fresh[(r["length"], r["i"])]
+        phase = report.setdefault(
+            r["phase"], {"n": 0, "token_mismatches": 0, "first_token_mismatches": 0}
+        )
+        phase["n"] += 1
+        phase["token_mismatches"] += base["tokens"] != r["tokens"]
+        phase["first_token_mismatches"] += base["tokens"][:1] != r["tokens"][:1]
+    return report
+
+
 def compare_files(baseline: Path, others: dict[str, Path]) -> dict[str, Any]:
     base = read_jsonl(baseline)
-    return {label: compare_runs(base, read_jsonl(path)) for label, path in others.items()}
+    report: dict[str, Any] = {"self_check": {"baseline": self_check(base)}}
+    for label, path in others.items():
+        run = read_jsonl(path)
+        report[label] = compare_runs(base, run)
+        report["self_check"][label] = self_check(run)
+    return report

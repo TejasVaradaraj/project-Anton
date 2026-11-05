@@ -11,7 +11,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 # LMCache restores changed model output in Week 4 (see README). Results from these runs would not
 # mean anything until that's resolved, so they must be asked for explicitly.
 if os.environ.get("ANTON_ALLOW_UNVERIFIED_OFFLOAD") != "1":
