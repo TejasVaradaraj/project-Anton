@@ -97,7 +97,7 @@ Week 0 setup is mostly done; SETUP.md has the verified state and the limitations
 - Record the blanks in SETUP.md (versions, Colab units/hr, AWS kernel). LMCache on T4 comes in Week 3.
 - AWS: test an Ubuntu image with `linux-modules-extra-$(uname -r)` for nvmet/nvmet-tcp/rdma_rxe. Paid: ask first.
 
-**Week 1 is measured on the A100** (run `20261105T074136Z_a100_llama31_8b`, results in the README). 62/62 requests
+**Week 1 is done, measured on the A100** (run `20261105T074136Z_a100_llama31_8b`, results in the README). 62/62 requests
 valid, and `vllm bench serve` agrees. Scope change: Kaggle stays a Qwen test bed, so the plan's T4 + 3B run was dropped.
 Prefill cost per token RISES with length, so don't quote a single prefill rate: use `by_prompt_length` in analysis.json.
 The cause isn't known yet. NEXT: Week 2 (trace generators and replayer). To get an A100, reuse the Drive notebook
