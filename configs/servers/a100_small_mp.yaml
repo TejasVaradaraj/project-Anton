@@ -1,0 +1,17 @@
+# The small GPU cache with LMCache in multi-process mode, vLLM's recommended setup: a separate
+# `lmcache server` owns the storage. Start it first, with --l1-size-gb matching kv-offloading-size.
+# Flags follow vLLM 0.33.0's examples/disaggregated/lmcache/cpu_offload_lmcache_mp.sh.
+name: a100_small_mp
+model: meta-llama/Llama-3.1-8B-Instruct
+port: 8000
+vllm_args:
+  dtype: bfloat16
+  max-model-len: 32768
+  kv-cache-memory: 8589934592
+  enable-prefix-caching: true
+  enable-prompt-tokens-details: true
+  kv-offloading-backend: lmcache
+  kv-offloading-size: 100
+  disable-hybrid-kv-cache-manager: true
+token_id_range: [0, 128000]
+kv_shape: { layers: 32, kv_heads: 8, head_dim: 128, dtype_bytes: 2 }
