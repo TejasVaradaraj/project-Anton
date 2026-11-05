@@ -51,9 +51,9 @@ time-to-live for agents), vLLM PagedAttention, LMCache docs.
 | Resource | Use |
 |---|---|
 | Kaggle (30 GPU hrs/week, 2x T4 16GB, ~29GB RAM, 12h sessions, background "Save & Run All") | All development/debugging, long sweeps, TP=2 experiment |
-| Google Colab (200 compute units/month; A100 40GB ~11-13 units/hr => ~15-17 A100 hrs/month; L4 fallback) | Headline Llama-8B results only |
-| Azure ($100 credits) | NVMe-oF + Soft-RoCE experiments (needs full VMs to load kernel modules; Colab/Kaggle can't) |
-| Datadog (GitHub Student Pack perk — NOT YET SET UP, optional until Week 2) | Live dashboards; git Parquet stays source of truth |
+| Google Colab (200 compute units/month; A100 80GB verified, units/hr not recorded; L4 fallback) | Headline Llama-8B results only |
+| AWS ($100 credits) | NVMe-oF + Soft-RoCE experiments (needs full VMs to load kernel modules; Colab/Kaggle can't). Replaces Azure, which is blocked. Tested Amazon Linux lacks nvmet/nvmet-tcp/rdma_rxe, see SETUP.md |
+| Datadog (GitHub Student Pack perk — configured, optional until Week 2) | Live dashboards; git Parquet stays source of truth |
 
 Models: A100 -> Llama-3.1-8B-Instruct bf16. 1x T4 -> Llama-3.2-3B-Instruct with `--dtype half` (T4 has no bf16).
 2x T4 -> Llama-3.1-8B fp16 TP=2. Colab L4 24GB -> 8B bf16 fallback.
@@ -76,9 +76,8 @@ Models: A100 -> Llama-3.1-8B-Instruct bf16. 1x T4 -> Llama-3.2-3B-Instruct with 
   Page cache trap: can't drop_caches without root -> use posix_fadvise(DONTNEED) or vmtouch -e; confirm with iostat.
   Correctness: greedy outputs + logprobs with vs without offload, with a no-offload-vs-no-offload noise baseline.
   Stacked bar TTFT breakdown per tier.
-- **Week 5 — Network storage on Azure.** Plan A (if T4 GPU quota granted): NC4as_T4_v3 + storage VM in same VNet,
-  accelerated networking, proximity placement group; end-to-end NVMe-oF/TCP then Soft-RoCE (rdma_rxe; fallback siw).
-  Plan B (likely, student credits): record KV I/O trace on GPU runs, replay it on 2 CPU VMs over NVMe-oF with
+- **Week 5 — Network storage on AWS (Azure is blocked).** First confirm a VM image can load nvmet, nvmet-tcp and
+  rdma_rxe (fallback siw); tested Amazon Linux can't. Plan: record KV I/O trace on GPU runs, replay it on 2 CPU VMs over NVMe-oF with
   O_DIRECT + fio, then combine in pandas with the measured load-time->TTFT relationship (validated on local tiers).
   Also export a RAM disk (null_blk/brd) to isolate network vs SSD latency.
 - **Week 6 — Agent-aware prefetch proxy** (FastAPI). X-Agent-Id header, POST /tool_start, per-tool duration history,
@@ -94,33 +93,20 @@ Repo layout: configs/{servers,traces,sweeps}, src/project_anton/{traces,harness,
 scripts/, notebooks/, tests/, results/ (summaries in git, raw in Drive/Blob). SETUP.md logs every version.
 
 ## WHERE I LEFT OFF
-Done:
-- Step 1 (approvals): HF account + Llama access requests + HF token; Kaggle phone verification; Azure checks/quota.
-- Step 2 (keys list) — I only have HF_TOKEN. No Datadog account/key yet.
-- Step 3 (GitHub repo `project-Anton`, uv, skeleton folders, .gitignore, SETUP.md).
-- Step 4a (Kaggle notebook created: Accelerator GPU T4 x2, Internet On, Persistence Files only).
+Week 0 setup is mostly done; SETUP.md has the verified state and the limitations. Still open:
+- Record the blanks in SETUP.md (versions, Colab units/hr, AWS kernel). LMCache on T4 comes in Week 3.
+- AWS: test an Ubuntu image with `linux-modules-extra-$(uname -r)` for nvmet/nvmet-tcp/rdma_rxe. Paid: ask first.
 
-**NEXT: Step 4b** — then 4c, 5, 6, 7:
-- 4b: Kaggle Add-ons -> Secrets -> add HF_TOKEN (attach to notebook). (DD_API_KEY later.)
-- 4c: Kaggle smoke test cells: nvidia-smi (2x T4) -> load secret via
-  `from kaggle_secrets import UserSecretsClient` -> `pip install vllm` (record version, then pin) ->
-  start `vllm serve` with subprocess.Popen in background (Qwen/Qwen2.5-0.5B-Instruct, --dtype half,
-  --max-model-len 4096, --enable-prefix-caching), poll /health -> one /v1/completions request ->
-  grep KV cache size from log -> switch to Llama-3.2-3B (--max-model-len 16384) -> `pip install lmcache`
-  matching vLLM version and record whether it works on T4. Stop session when done.
-- 5: Colab: Secrets (key icon) HF_TOKEN via `google.colab.userdata`; A100 + High-RAM; note units/hr;
-  mount Drive for logs; run Llama-3.1-8B bf16; record KV cache size; "Disconnect and delete runtime".
-- 6: Datadog (optional until Week 2): claim via GitHub Student Developer Pack, find DD_SITE from URL,
-  create API key, send a test metric to https://api.<DD_SITE>/api/v2/series (expect 202).
-- 7: Azure: $100 budget with 25/50/75% alerts; SSH key; Standard_B2s Ubuntu 24.04 test VM with auto-shutdown;
-  test `modprobe nvmet nvmet-tcp nvme-tcp nvmet-rdma nvme-rdma rdma_rxe null_blk` (if fail:
-  `apt install linux-modules-extra-$(uname -r)`; fallback `siw`); record results; Stop until
-  "Stopped (deallocated)", then delete the VM.
+**Week 1 is in progress.** The client, runner, analysis and notebook are written and tested against a fake
+server only. **No real GPU numbers exist yet.** NEXT: run `notebooks/week1_ttft.ipynb` on Kaggle T4, then
+compare against `vllm bench serve`, then repeat on A100 (~1 hr, uses Colab units: ask first).
 
-After setup: write the Week 1 streaming TTFT/TPOT benchmark client + Kaggle notebook.
+Commands: `uv run pytest`, `uv run ruff check .`, `uv run anton --help`.
 
 ## Rules for helping me
 - Simple vocabulary; define new terms. Step-by-step with exact commands.
 - Never put secrets (HF_TOKEN, DD_API_KEY) in code, notebooks, or git — use Kaggle/Colab Secrets.
 - Pin versions; record everything in SETUP.md.
 - Be honest about limitations (smaller model, emulated RDMA, synthetic tool timings, projections vs measurements).
+- Never make up measurements or claim a test ran if it didn't. Fake-server output is not a measurement.
+- Get my approval before paid cloud use or allocating a GPU session.

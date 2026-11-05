@@ -11,37 +11,95 @@ Never put secrets (HF_TOKEN, DD_API_KEY) in this file.
 | Python (local) | 3.14 (`.python-version`) |
 | requires-python | >=3.12 (numpy 2.5 needs 3.12; also matches Kaggle/Colab) |
 
+Unless noted, the values below were run and reported by Tejasvi by hand (recorded 2026-11-05).
+A blank means "not recorded yet", not "failed". From now on, each benchmark run also saves its
+own `env.json`, which is the authoritative record for that run.
+
+## Status at a glance
+| Piece | Status |
+|---|---|
+| Kaggle T4 + Qwen2.5-0.5B via vLLM | Works |
+| Kaggle T4 + Llama-3.2-3B | Not run yet (needed for Week 1) |
+| Colab A100 + Llama-3.1-8B bf16, 32,768 context | Works |
+| LMCache on any platform | Not run yet (Week 3) |
+| Hugging Face gated model access | Approved and tested |
+| Datadog | Account and API key configured |
+| AWS EC2 SSH | Works |
+| NVMe-oF target + Soft-RoCE on AWS | **Blocked on the tested image** (see AWS) |
+| Azure | **Blocked**: subscription restrictions stop VM creation |
+
 ## Kaggle (2x T4)
 | Item | Value |
 |---|---|
 | Python | |
 | CUDA / driver | |
-| vllm | |
+| vLLM | 0.33.0 |
 | lmcache | |
 | lmcache works on T4? | |
 | KV cache size (Qwen2.5-0.5B, 4k ctx) | |
 | KV cache size (Llama-3.2-3B, 16k ctx) | |
 
-## Colab (A100 40GB)
+## Colab (A100 80GB)
 | Item | Value |
 |---|---|
 | Python | |
 | CUDA / driver | |
-| vllm | |
+| vLLM | |
 | Compute units/hr | |
-| KV cache size (Llama-3.1-8B bf16) | |
+| Model | meta-llama/Llama-3.1-8B-Instruct, bf16 |
+| Max context | 32,768 tokens |
+| GPU KV cache size | 56.3 GiB, 461,216 tokens |
+| Max concurrency at 32K | 14.08x (a theoretical limit from vLLM's startup log, not a measured load) |
 
-## Azure
+Cross-check (arithmetic only): 461,216 tokens x 128 KiB/token = 56.30 GiB, and
+461,216 / 32,768 = 14.08. Both match the formula in `analysis/kv_math.py`, and
+`tests/test_kv_math.py` pins them.
+
+The earlier plan assumed a 40 GB A100. This one has 80 GB, so 8B fits far more KV cache than
+planned. Week 3's "cliff" (where agents start evicting each other) will need more concurrent
+agents or a smaller `--gpu-memory-utilization` to appear. Decide that when Week 3 starts.
+
+## AWS ($100 credits, no GPU use planned)
 | Item | Value |
 |---|---|
-| Budget + alerts | |
-| VM size / image | |
+| EC2 SSH | Works |
+| Image tested | Amazon Linux |
 | Kernel | |
-| modprobe nvmet nvmet-tcp nvme-tcp nvmet-rdma nvme-rdma rdma_rxe null_blk | |
-| Fallbacks needed (linux-modules-extra, siw) | |
+| Instance type | |
+| `nvme-tcp` | Available |
+| `nvmet`, `nvmet-tcp` | **Not available** |
+| `rdma_rxe` | **Not available** |
+| `nvmet-rdma`, `nvme-rdma`, `null_blk`, `siw` | |
+
+What this means, in plain words:
+- NVMe-oF has two sides. The **initiator** (`nvme-tcp`) is the machine that uses the remote disk.
+  The **target** (`nvmet` + `nvmet-tcp`) is the machine that serves it. This image can only be
+  the initiator, so Week 5 can't run on it alone.
+- `rdma_rxe` is Soft-RoCE, which is RDMA emulated in software. Without it, no RDMA experiment
+  runs on this image.
+- These results only cover "the tested installation". Other images or an extra kernel-modules
+  package may behave differently. **Not tested yet:** an Ubuntu image with
+  `linux-modules-extra-$(uname -r)`. Testing that is the next AWS step, and it needs approval
+  because the VM costs money while running.
+
+## Azure
+Blocked: Azure for Students stops VM creation because of subscription restrictions. Week 5 moves
+to AWS if the module test above works. Any Soft-RoCE result stays labeled as emulated RDMA.
 
 ## Datadog (optional until Week 2)
 | Item | Value |
 |---|---|
+| Account + API key | Configured (key kept out of git) |
 | DD_SITE | |
 | Test metric returned 202? | |
+
+## Known limitations
+- **GPU differs from the JD target.** Measurements use 8B on one A100 and small models on T4, not
+  70B on 4x H200. Anything about 70B is a projection and must be labeled as one.
+- **No real RDMA or BlueField hardware.** The best available option is emulated Soft-RoCE, and
+  that isn't confirmed to work yet. Its latency says nothing about hardware RoCE.
+- **Kaggle/Colab can't load kernel modules.** Storage-protocol work has to run on a VM.
+- **Shared machines.** Kaggle and Colab are shared and virtualized, and the benchmark client runs
+  on the same machine as the server, so expect noise. Report spread, not just averages.
+- **Synthetic prompts.** Week 1 prompts are random token IDs. Their prefill cost should be
+  representative, but they aren't real text, and the generated output is meaningless.
