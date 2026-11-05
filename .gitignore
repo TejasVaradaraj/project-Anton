@@ -228,3 +228,4 @@ results/raw/
 # Raw per-request data stays out of git; summaries in results/<run_id>/ are committed.
 results/*/raw/
 logs/
+results/**/raw/

@@ -9,9 +9,9 @@ prefetching it back works, and how fast the storage must be for that to pay off.
 
 ## Status
 
-**Weeks 1-5 have real measurements, and the main finding so far is a problem.** With vLLM 0.33.0 and LMCache
-0.5.6 on this setup, restored KV caches change the model's output, with no error reported. They were also
-slower than recomputing. So prefetching (Week 6) hasn't been run: it would only speed up wrong answers.
+**Stopped early, on purpose: restored KV caches changed the model's output, with no error reported.** That
+held across every LMCache path tested with vLLM 0.33.0 on this setup, so prefetch and final sweeps weren't
+run on a GPU. [REPORT.md](REPORT.md) has the findings, what's done, what isn't, and the next steps.
 
 ## Week 1 result: what the prefix cache saves
 
@@ -116,20 +116,19 @@ again. LMCache 0.5.6 with vLLM 0.33.0, 5 repeats per length, 60/60 requests vali
 |---|---:|---:|
 | Two separate GPU-only servers, all 36 requests | 0 of 36 | 0 |
 | GPU only: evicted and recomputed vs fresh | 0 | 0 |
-| GPU only: ordinary prefix cache vs fresh | 3 | 0.021 (0.037) |
-| LMCache CPU: restored vs fresh | **11** | **0.986 (3.385)** |
-| LMCache disk: restored vs fresh | **10** | **0.395 (3.374)** |
+| GPU only: ordinary prefix cache vs fresh | 3 | 0.016 (0.037) |
+| LMCache in-process, CPU: restored vs fresh | **11** | **0.675 (3.385)** |
+| LMCache in-process, disk: restored vs fresh | **10** | **0.367 (3.374)** |
+| LMCache multi-process, CPU: restored vs fresh | **7** | 0.070 (3.356) |
+| LMCache multi-process, 60 s before eviction | **5** | 0.066 (2.677) |
 
-So the server is deterministic, and ordinary prefix caching causes small rounding-level changes on these
-prompts. Restores change the first token's logprob by roughly 20-50 times that at the median, and
-produce entirely different text. Nothing reports an error, and vLLM counts them as cache hits. **Until
-this is resolved, the LMCache timings in Weeks 3 and 4 describe restores that aren't correct.** Prefetch
-and final offload runs are held behind a check in their scripts for this reason.
+So the server is deterministic, and ordinary prefix caching makes small rounding-level changes on these
+prompts. Restores go far beyond that and can produce entirely different text, yet nothing reports an error
+and vLLM counts them as cache hits. **Until this is resolved, the LMCache timings in Weeks 3 and 4 describe
+restores that aren't correct.** Prefetch and final offload runs are held behind a check in their scripts.
 
-The cause isn't confirmed. An open LMCache pull request,
-[LMCache/LMCache#4887](https://github.com/LMCache/LMCache/pull/4887), describes copy errors between
-newer vLLM KV layouts and this connector, which would fit. Prompts here are random token IDs, so this
-should be repeated with real text.
+The cause isn't confirmed, and prompts here are random token IDs, so this should be repeated with real
+text. [REPORT.md](REPORT.md) covers the leads and next steps.
 
 **Restores were also slower than recomputing.** The time to get the cache back, compared with warm:
 

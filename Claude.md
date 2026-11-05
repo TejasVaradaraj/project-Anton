@@ -97,21 +97,12 @@ Week 0 setup is mostly done; SETUP.md has the verified state and the limitations
 - Record the blanks in SETUP.md (versions, Colab units/hr, AWS kernel). LMCache on T4 comes in Week 3.
 - AWS: test an Ubuntu image with `linux-modules-extra-$(uname -r)` for nvmet/nvmet-tcp/rdma_rxe. Paid: ask first.
 
-**Week 1 is done, measured on the A100** (run `20261105T074136Z_a100_llama31_8b`, results in the README). 62/62 requests
-valid, and `vllm bench serve` agrees. Scope change: Kaggle stays a Qwen test bed, so the plan's T4 + 3B run was dropped.
-Prefill cost per token RISES with length, so don't quote a single prefill rate: use `by_prompt_length` in analysis.json.
-The cause isn't known yet. To get an A100, reuse the Drive notebook Project-Anton.ipynb; a new notebook got an L4
-instead. Chrome saves downloads to the Desktop on this Mac.
-
-**Week 2 harness has run on the real A100** (`results/week2_agent_load_sessions-*`, README table): 211/211 valid, no eviction,
-using the plan's numbers, which calibration later showed were too large. `configs/traces/agent.yaml` is now calibrated from
-20,008 SWE-agent runs (`scripts/calibrate_traces.py`, README section), but hasn't been replayed on a GPU. Still open: tool pauses
-are assumptions (no timing found in datasets checked; `melissapan/swe-bench-lite-agent-traces-v14` trace files not opened yet), recheck token counts with Llama's gated tokenizer, optional Datadog push.
-**Week 3 done** (README table): cliff between 64 and 96 sessions; LMCache keeps caches but lowers goodput. A client Unicode bug
-affected those runs slightly (fixed in 7bbfebe), so rerun key points in Week 7. Weeks 4 and 6 test the small GPU cache.
-Week 5 runs in a local Lima VM (`scripts/nvmeof_lab.sh`): one VM, no real network, so it shows protocol software cost only.
-Tejasvi asked for the A100 to be turned off once GPU work finishes. Colab's accelerator
-setting can revert to CPU after a runtime is deleted, so check it before running.
+**The project stopped on purpose on 2026-11-05: REPORT.md has the full state.** With vLLM 0.33.0 and LMCache 0.5.6, restored
+KV caches change model output (in-process and multi-process), with no error. Week 6 and 7 scripts refuse to run until that's
+fixed (ANTON_ALLOW_UNVERIFIED_OFFLOAD). NEXT: repeat the correctness check with real text, then try a known-good version pair.
+The A100 runtime was deleted. Colab can hand out a different GPU, and its accelerator setting can revert to CPU, so check first.
+Reuse the Drive notebook Project-Anton.ipynb. Colab's port 8080 is taken: run `lmcache server` with --http-port 8091. Chrome
+saves downloads to the Desktop on this Mac. Week 5's lab (`scripts/nvmeof_lab.sh`) needs one Lima VM, as two can't reach each other.
 
 Commands: `uv run pytest`, `uv run ruff check .`, `uv run anton --help`.
 

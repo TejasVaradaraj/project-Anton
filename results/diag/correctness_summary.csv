@@ -1,0 +1,11 @@
+setup,phase,prompts,outputs_changed,first_token_logprob_change_median,first_token_logprob_change_max
+GPU only,cached,12,3,0.0164,0.0372
+GPU only,evicted,12,0,0.0,0.0
+In-process CPU,cached,12,2,0.0119,0.0634
+In-process CPU,evicted,12,11,0.6745,3.3851
+In-process disk,cached,12,2,0.0119,0.0634
+In-process disk,evicted,12,10,0.3668,3.3738
+Multi-process,cached,12,3,0.0164,0.0372
+Multi-process,evicted,12,7,0.0701,3.3561
+Multi-process 60 s,cached,12,3,0.0164,0.0372
+Multi-process 60 s,evicted,12,5,0.0656,2.6773
