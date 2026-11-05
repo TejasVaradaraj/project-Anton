@@ -3,11 +3,18 @@
 import asyncio
 import json
 
+import pandas as pd
 import pytest
 from fake_vllm import FakeVllm
 
 from project_anton.analysis.kv_math import ModelShape
-from project_anton.analysis.ttft import analyze_run, fit_prefill, load_requests, summarize
+from project_anton.analysis.ttft import (
+    analyze_run,
+    fit_prefill,
+    load_requests,
+    prefill_by_length,
+    summarize,
+)
 from project_anton.harness.runlog import read_jsonl
 from project_anton.harness.server import ServerConfig
 from project_anton.harness.ttft_bench import (
@@ -147,8 +154,9 @@ def test_analysis_recovers_the_injected_prefill_rate(tmp_path):
 
     analysis = analyze_run(tmp_path)
     assert analysis["prefill_fit"]["prefill_tokens_per_s"] == pytest.approx(50_000, rel=0.15)
-    # 128 KiB/token x 50,000 tokens/s is about 6.55 GB/s.
-    assert analysis["break_even_storage_gbytes_per_s"] == pytest.approx(6.55, rel=0.15)
+    # 128 KiB/token x 50,000 tokens/s is about 6.55 GB/s at every length.
+    for row in analysis["by_prompt_length"]:
+        assert row["break_even_storage_gbytes_per_s"] == pytest.approx(6.55, rel=0.15)
     assert analysis["requests_valid"] == analysis["requests_total"]
 
     assert (tmp_path / "summary.csv").exists()
@@ -164,6 +172,40 @@ def test_small_samples_report_no_p95(tmp_path):
     sweep_on(FakeVllm(), make_sweep(), tmp_path)
     summary = summarize(load_requests(tmp_path / "raw" / "requests.jsonl"))
     assert summary["ttft_p95_ms"].isna().all()
+
+
+def fake_records(cold_by_length: dict[int, float], warm_s: float = 0.01) -> pd.DataFrame:
+    rows = []
+    for length, cold_s in cold_by_length.items():
+        rows.append({"phase": "cold", "target_prompt_tokens": length, "ttft_s": cold_s})
+        rows.append({"phase": "warm", "target_prompt_tokens": length, "ttft_s": warm_s})
+    return pd.DataFrame(rows).assign(valid=True)
+
+
+def test_superlinear_ttft_gets_a_warning_despite_high_r_squared():
+    # The shape of the real A100 run: cost per token rises with length.
+    df = fake_records(
+        {1000: 0.078, 2000: 0.141, 4000: 0.286, 8000: 0.607, 16000: 1.375, 32000: 3.475}
+    )
+    fit = fit_prefill(df)
+    assert fit["r_squared"] > 0.95
+    assert "warning" in fit
+
+
+def test_linear_ttft_gets_no_warning():
+    assert "warning" not in fit_prefill(fake_records({1000: 0.11, 2000: 0.21, 4000: 0.41}))
+
+
+def test_break_even_uses_time_saved_at_each_length():
+    rows = prefill_by_length(fake_records({1000: 0.11, 2000: 0.21}), SHAPE)
+    # 1000 tokens x 128 KiB = 0.131072 GB, and 0.10 s saved.
+    assert rows[0]["break_even_storage_gbytes_per_s"] == pytest.approx(1.31072)
+    assert rows[0]["cold_to_warm_ratio"] == pytest.approx(11)
+    assert rows[1]["break_even_storage_gbytes_per_s"] == pytest.approx(1.31072)
+
+
+def test_no_break_even_when_cache_saves_no_time():
+    assert prefill_by_length(fake_records({1000: 0.005}), SHAPE) == []
 
 
 def test_no_prefill_rate_from_one_length(tmp_path):

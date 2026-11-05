@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-from project_anton.analysis.kv_math import ModelShape, break_even_bandwidth  # noqa: E402
+from project_anton.analysis.kv_math import ModelShape, cache_bytes  # noqa: E402
 from project_anton.harness.runlog import read_jsonl, write_json  # noqa: E402
 
 # A p95 from fewer samples is really just the largest value, so it isn't reported.
@@ -84,12 +84,48 @@ def fit_prefill(df: pd.DataFrame) -> dict[str, Any] | None:
         return None
     total = ((y - y.mean()) ** 2).sum()
     residual = ((y - (slope * x + intercept)) ** 2).sum()
-    return {
+    fit = {
         "prefill_tokens_per_s": float(1 / slope),
         "overhead_s": float(intercept),
         "r_squared": float(1 - residual / total) if total > 0 else None,
         "n_points": len(cold),
     }
+    # A high r_squared doesn't prove a straight line. Time can't be negative, so a
+    # negative overhead means cost per token rises with length and one rate won't do.
+    if intercept < 0:
+        fit["warning"] = "negative overhead: TTFT isn't linear in length, so use by_prompt_length"
+    return fit
+
+
+def prefill_by_length(df: pd.DataFrame, shape: ModelShape) -> list[dict[str, Any]]:
+    """Measured prefill cost and break-even storage speed at each prompt length.
+
+    Time saved by the cache is median cold TTFT minus median warm TTFT. Storage that
+    delivers this prompt's KV cache faster than that beats recomputing it. Storage
+    latency and transfer overhead aren't included, so this is a lower bound.
+    """
+    valid = df[df["valid"]]
+    medians = valid.groupby(["phase", "target_prompt_tokens"])["ttft_s"].median()
+    rows = []
+    for length in sorted(valid["target_prompt_tokens"].unique()):
+        cold, warm = medians.get(("cold", length)), medians.get(("warm", length))
+        if cold is None or warm is None or cold <= warm:
+            continue
+        saved_s = cold - warm
+        rows.append(
+            {
+                "prompt_tokens": int(length),
+                "cold_ttft_s": float(cold),
+                "warm_ttft_s": float(warm),
+                "cold_to_warm_ratio": float(cold / warm),
+                "avg_prefill_tokens_per_s": float(length / cold),
+                "kv_gbytes": float(cache_bytes(int(length), shape) / 1e9),
+                "break_even_storage_gbytes_per_s": float(
+                    cache_bytes(int(length), shape) / saved_s / 1e9
+                ),
+            }
+        )
+    return rows
 
 
 def plot_ttft(df: pd.DataFrame, path: Path, title: str) -> None:
@@ -153,19 +189,16 @@ def analyze_run(run_dir: Path) -> dict[str, Any]:
     summary = summarize(df)
     summary.to_csv(run_dir / "summary.csv", index=False, float_format="%.3f")
 
-    prefill = fit_prefill(df)
+    shape = ModelShape(**config["server"]["kv_shape"])
     analysis: dict[str, Any] = {
         "run_id": config["run_id"],
         "model": config["server"]["model"],
         "requests_total": len(df),
         "requests_valid": int(df["valid"].sum()),
         "invalid_reasons": (df["invalid_reasons"].explode().dropna().value_counts().to_dict()),
-        "prefill_fit": prefill,
+        "prefill_fit": fit_prefill(df),
+        "by_prompt_length": prefill_by_length(df, shape),
     }
-    if prefill is not None:
-        shape = ModelShape(**config["server"]["kv_shape"])
-        bandwidth = break_even_bandwidth(shape, prefill["prefill_tokens_per_s"])
-        analysis["break_even_storage_gbytes_per_s"] = bandwidth / 1e9
     write_json(run_dir / "analysis.json", analysis)
 
     title = f"TTFT vs prompt length: {config['server']['model']}"
