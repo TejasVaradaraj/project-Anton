@@ -7,7 +7,7 @@ TPOT (time per output token): average gap between tokens after the first.
 
 import json
 import time
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -82,6 +82,22 @@ def compute_timing(
     return ttft, tpot, e2e
 
 
+async def sse_lines(response: httpx.Response) -> AsyncIterator[str]:
+    """Yield SSE lines, splitting only on newlines.
+
+    httpx's aiter_lines also splits on characters like U+2028 and \\x85. A model can generate those
+    inside a JSON string, and a real sweep lost sessions when such a string got cut in half.
+    """
+    buffer = b""
+    async for chunk in response.aiter_bytes():
+        buffer += chunk
+        *lines, buffer = buffer.split(b"\n")
+        for line in lines:
+            yield line.rstrip(b"\r").decode("utf-8", errors="replace")
+    if buffer:
+        yield buffer.decode("utf-8", errors="replace")
+
+
 def parse_sse_line(line: str) -> str | None:
     """Return the payload of an SSE `data:` line, or None for anything else."""
     if not line.startswith("data:"):
@@ -129,7 +145,7 @@ async def stream_completion(
                 result.error = body.decode(errors="replace")[:ERROR_BODY_LIMIT]
                 return result
 
-            async for line in response.aiter_lines():
+            async for line in sse_lines(response):
                 # Take the time before parsing, so JSON decoding isn't counted.
                 now = clock()
                 data = parse_sse_line(line)

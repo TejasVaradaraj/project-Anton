@@ -24,6 +24,7 @@ class FakeVllm:
     trailing_finish_chunk_delay_s: float | None = None
     prompt_tokens_details: bool = True
     external_hits: float = 0.0
+    line_separator_text: bool = False
     capacity_blocks: int | None = None  # When set, oldest blocks are evicted beyond this
     offload_load_s_per_token: float | None = None  # When set, evicted blocks load at this cost
     requests: list[dict] = field(default_factory=list)
@@ -97,7 +98,8 @@ class FakeVllm:
         )
 
     async def _send_chunk(self, writer, obj: dict | str) -> None:
-        text = obj if isinstance(obj, str) else json.dumps(obj)
+        # Raw UTF-8, not ASCII escapes, as vLLM sends it.
+        text = obj if isinstance(obj, str) else json.dumps(obj, ensure_ascii=False)
         line = f"data: {text}\n\n".encode()
         writer.write(f"{len(line):x}\r\n".encode() + line + b"\r\n")
         await writer.drain()
@@ -163,6 +165,8 @@ class FakeVllm:
             step = min(step, max_tokens - sent)
             sent += step
             text = "" if (self.empty_first_text and sent == step) else "x" * step
+            if text and self.line_separator_text:
+                text = "a\u2028b\x85c\x0cd"
             chunk = {
                 "choices": [
                     {
