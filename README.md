@@ -53,7 +53,7 @@ cell. All 62 requests passed the validity checks.
 |---|---|
 | TTFT | Time to first token: from sending the request to the first generated token |
 | TPOT | Time per output token: average gap between tokens after the first |
-| Prefill rate | Tokens per second the GPU can read, from the slope of cold TTFT vs prompt length |
+| Prefill rate | Tokens per second the GPU can read: prompt length / cold TTFT, at each length |
 | Break-even bandwidth | Storage speed at which loading a KV cache takes as long as recomputing it |
 
 Week 1 sends each prompt twice: once uncached (cold), then again right away (warm). Prompts are
