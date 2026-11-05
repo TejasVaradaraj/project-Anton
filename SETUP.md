@@ -100,6 +100,19 @@ to AWS if the module test above works. Any Soft-RoCE result stays labeled as emu
 | DD_SITE | |
 | Test metric returned 202? | |
 
+## Test results (no GPU; 2026-11-05)
+| Check | Result |
+|---|---|
+| `pytest`, Python 3.14 (macOS) | 94 passed |
+| `pytest`, Python 3.12 (macOS) | 94 passed |
+| `ruff check` | Passed |
+| Fresh clone, notebook's install steps, Python 3.12 | `anton --help` and imports work |
+| Fake server set to 33,333 tokens/s | Pipeline measured 33,099 tokens/s (0.7% off) |
+| Notebook on Kaggle or Colab | **Not run yet** |
+| GitHub Actions CI | **Not run yet** (branch not pushed) |
+
+These check the software only. The fake server's numbers are not performance measurements.
+
 ## Known limitations
 - **GPU differs from the JD target.** Measurements use 8B on one A100 and small models on T4, not
   70B on 4x H200. Anything about 70B is a projection and must be labeled as one.
