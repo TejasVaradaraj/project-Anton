@@ -107,8 +107,10 @@ instead. Chrome saves downloads to the Desktop on this Mac.
 using the plan's numbers, which calibration later showed were too large. `configs/traces/agent.yaml` is now calibrated from
 20,008 SWE-agent runs (`scripts/calibrate_traces.py`, README section), but hasn't been replayed on a GPU. Still open: tool pauses
 are assumptions (no timing found in datasets checked; `melissapan/swe-bench-lite-agent-traces-v14` trace files not opened yet), recheck token counts with Llama's gated tokenizer, optional Datadog push.
-NEXT: Week 3. About 32 calibrated sessions should fill the A100's KV cache (a prediction), so sweep across that point.
-Tejasvi manages shutting down the A100 runtime themself: never delete or disconnect it unless asked. Colab's accelerator
+**Week 3 done** (README table): cliff between 64 and 96 sessions; LMCache keeps caches but lowers goodput. A client Unicode bug
+affected those runs slightly (fixed in 7bbfebe), so rerun key points in Week 7. Weeks 4 and 6 test the small GPU cache.
+Week 5 runs in a local Lima VM (`scripts/nvmeof_lab.sh`): one VM, no real network, so it shows protocol software cost only.
+Tejasvi asked for the A100 to be turned off once GPU work finishes. Colab's accelerator
 setting can revert to CPU after a runtime is deleted, so check it before running.
 
 Commands: `uv run pytest`, `uv run ruff check .`, `uv run anton --help`.

@@ -1,0 +1,260 @@
+{
+  "run_id": "week3_lmcache_arrival_rate_per_s-1p0_sessions-24",
+  "server": {
+    "env": {
+      "LMCACHE_CHUNK_SIZE": "256",
+      "LMCACHE_LOCAL_CPU": "True",
+      "LMCACHE_MAX_LOCAL_CPU_SIZE": "100"
+    },
+    "kv_shape": {
+      "dtype_bytes": 2,
+      "head_dim": 128,
+      "kv_heads": 8,
+      "layers": 32
+    },
+    "model": "meta-llama/Llama-3.1-8B-Instruct",
+    "name": "a100_llama31_8b_lmcache",
+    "port": 8000,
+    "token_id_range": [
+      0,
+      128000
+    ],
+    "vllm_args": {
+      "dtype": "bfloat16",
+      "enable-prefix-caching": true,
+      "enable-prompt-tokens-details": true,
+      "kv-transfer-config": "{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}",
+      "max-model-len": 32768
+    }
+  },
+  "trace": {
+    "arrival_rate_per_s": 1.0,
+    "kind": "agent",
+    "max_context_tokens": 32000,
+    "name": "agent",
+    "params": {
+      "first_turn_tokens": {
+        "probs": [
+          0.0,
+          0.01,
+          0.05,
+          0.1,
+          0.25,
+          0.5,
+          0.75,
+          0.9,
+          0.95,
+          0.99,
+          0.999
+        ],
+        "values": [
+          685,
+          698,
+          712,
+          727,
+          776,
+          877,
+          1097,
+          1389,
+          1743,
+          2787,
+          3530
+        ]
+      },
+      "prefix_tokens": 1119,
+      "response_tokens": {
+        "probs": [
+          0.0,
+          0.01,
+          0.05,
+          0.1,
+          0.25,
+          0.5,
+          0.75,
+          0.9,
+          0.95,
+          0.99,
+          0.999
+        ],
+        "values": [
+          14,
+          27,
+          37,
+          42,
+          53,
+          78,
+          124,
+          192,
+          254,
+          481,
+          1040
+        ]
+      },
+      "steps": {
+        "probs": [
+          0.0,
+          0.01,
+          0.05,
+          0.1,
+          0.25,
+          0.5,
+          0.75,
+          0.9,
+          0.95,
+          0.99,
+          0.999
+        ],
+        "values": [
+          1,
+          4,
+          6,
+          7,
+          10,
+          17,
+          33,
+          50,
+          70,
+          156,
+          285
+        ]
+      },
+      "tools": {
+        "edit": {
+          "median_s": 0.5,
+          "output_tokens": {
+            "probs": [
+              0.0,
+              0.01,
+              0.05,
+              0.1,
+              0.25,
+              0.5,
+              0.75,
+              0.9,
+              0.95,
+              0.99,
+              0.999
+            ],
+            "values": [
+              20,
+              31,
+              35,
+              38,
+              127,
+              410,
+              780,
+              1253,
+              1375,
+              1660,
+              2981
+            ]
+          },
+          "sigma": 0.5,
+          "weight": 0.373
+        },
+        "read": {
+          "median_s": 0.5,
+          "output_tokens": {
+            "probs": [
+              0.0,
+              0.01,
+              0.05,
+              0.1,
+              0.25,
+              0.5,
+              0.75,
+              0.9,
+              0.95,
+              0.99,
+              0.999
+            ],
+            "values": [
+              21,
+              28,
+              35,
+              62,
+              866,
+              1101,
+              1254,
+              1389,
+              1470,
+              1715,
+              3014
+            ]
+          },
+          "sigma": 0.5,
+          "weight": 0.19
+        },
+        "run": {
+          "median_s": 20.0,
+          "output_tokens": {
+            "probs": [
+              0.0,
+              0.01,
+              0.05,
+              0.1,
+              0.25,
+              0.5,
+              0.75,
+              0.9,
+              0.95,
+              0.99,
+              0.999
+            ],
+            "values": [
+              19,
+              24,
+              29,
+              33,
+              46,
+              85,
+              182,
+              375,
+              634,
+              1751,
+              7243
+            ]
+          },
+          "sigma": 0.8,
+          "weight": 0.187
+        },
+        "search": {
+          "median_s": 1.0,
+          "output_tokens": {
+            "probs": [
+              0.0,
+              0.01,
+              0.05,
+              0.1,
+              0.25,
+              0.5,
+              0.75,
+              0.9,
+              0.95,
+              0.99,
+              0.999
+            ],
+            "values": [
+              18,
+              24,
+              29,
+              32,
+              38,
+              54,
+              88,
+              163,
+              304,
+              1208,
+              5447
+            ]
+          },
+          "sigma": 0.6,
+          "weight": 0.249
+        }
+      }
+    },
+    "pause_scale": 1.0,
+    "seed": 0,
+    "sessions": 24
+  }
+}

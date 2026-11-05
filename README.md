@@ -9,10 +9,9 @@ prefetching it back works, and how fast the storage must be for that to pay off.
 
 ## Status
 
-**Week 1 of 8 is done. Week 2's harness has run on a real A100, and its agent trace is now calibrated
-from real agent runs, though that calibrated trace hasn't been replayed on a GPU yet.** Tool pause
-times remain assumptions. The offloading itself is still ahead. See [SETUP.md](SETUP.md) for what has been verified and the known
-limitations.
+**Weeks 1-3 have real measurements on an A100.** Results so far don't show offload winning on its own:
+LMCache removes cache misses, but in the Week 3 sweep it lowers goodput. Later experiments are testing
+whether that changes when cache capacity, rather than GPU compute, is the limit.
 
 ## Week 1 result: what the prefix cache saves
 
@@ -69,6 +68,41 @@ All 211 requests were valid, and every request met the TTFT under 2 s and TPOT u
 - **Peak `vllm:kv_cache_usage_perc` was only 13%.** It looks like it counts running requests only, so
   it isn't a measure of how full the cache is. "Previous prompt cached" is the better early signal.
 - Each row is one short run. Sweep points shared one server, one after another.
+
+## Week 3 result: the cliff, and what CPU offload does to it
+
+Calibrated agents arriving at 1 per second, on the full 56 GiB GPU KV cache, with and without LMCache
+0.5.6 offloading to CPU RAM. Goodput counts requests meeting TTFT under 2 s and TPOT under 100 ms.
+
+![Cliff comparison](results/week3/cliff.png)
+
+| Sessions | Setup | Peak concurrent | Found in cache | Hit TTFT p50 (ms) | Hit TTFT p95 (ms) | Miss TTFT p50 (ms) | TPOT p50 (ms) | Met targets | Goodput (tokens/s) |
+|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 32 | GPU only | 18 | 99.9% | 120 | 263 | no misses | 18.4 | 100% | 147 |
+| 32 | LMCache | 20 | 99.9% | 183 | 562 | no misses | 20.7 | 100% | 143 |
+| 48 | GPU only | 30 | 99.9% | 168 | 367 | no misses | 28.5 | 100% | 218 |
+| 48 | LMCache | 31 | 99.9% | 276 | 796 | no misses | 33.8 | 100% | 204 |
+| 64 | GPU only | 41 | 98.5% | 218 | 518 | 1,503 | 46.8 | 99.1% | 251 |
+| 64 | LMCache (see below) | 45 | 99.9% | 322 | 954 | no misses | 45.1 | 98.7% | 223 |
+| 96 | GPU only | 62 | 67.1% | 280 | 1,437 | 33,324 | 101.0 | 49.9% | 69 |
+| 96 | LMCache | 68 | 99.4% | 927 | 19,896 | 1 miss | 122.1 | 37.0% | 37 |
+
+**What was measured**
+- **There's a cliff between 64 and 96 sessions.** Goodput falls 73%, and a turn that misses the cache
+  waits about 33 s, far beyond the 3.5 s a 32k recompute takes alone, so misses queue behind each other.
+- **LMCache really does restore caches.** Turns finding their cache go from 67% to 99.4%.
+- **But LMCache costs goodput here.** It's lower at every load above 16 sessions, and half at 96
+  sessions. Even with no eviction, its TTFT is about 40-60% higher.
+- **The compute limit arrives too.** TPOT passes the 100 ms target at 96 sessions in both setups.
+- My prediction that about 32 sessions would start the cliff was wrong. Sessions finish and leave, so
+  total context overstates what has to stay live at once.
+
+**What this doesn't show**
+- Why LMCache adds this overhead hasn't been tested. Saving each chunk to CPU RAM is the likely cause.
+- This is LMCache's default settings on one machine in one session, without tuning.
+- A client bug ended some sessions early when the model generated certain Unicode characters. It's
+  fixed now. Most points lost 0-2 requests, but LMCache at 64 sessions lost 11 sessions' remaining
+  requests, sending 13% less load, so that row isn't a fair comparison.
 
 ## Agent trace calibration
 

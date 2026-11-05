@@ -11,6 +11,7 @@ from project_anton.harness.runlog import read_jsonl, write_json
 DEFAULT_SLO = {"ttft_s": 2.0, "tpot_s": 0.1}
 # Below this many samples a percentile is really just one of the largest values.
 MIN_SAMPLES = {0.95: 20, 0.99: 100}
+HIT_THRESHOLD = 0.9  # Share of the previous prompt found in cache for a turn to count as a hit
 COUNTERS = (
     "vllm:prefix_cache_queries_total",
     "vllm:prefix_cache_hits_total",
@@ -84,6 +85,11 @@ def summarize_replay(df: pd.DataFrame, slo: dict[str, float] | None = None) -> d
     after_tool = valid[valid["tool"].notna()]
     summary["after_tool"] = _latency(after_tool)
     summary["by_tool"] = {tool: _latency(group) for tool, group in after_tool.groupby("tool")}
+    # Slow hits point to queueing, and slow misses to eviction. Offload can only fix the second.
+    if not after_tool.empty:
+        found = (after_tool["cached_tokens"].fillna(0)) / after_tool["previous_prompt_tokens"]
+        summary["cache_hit"] = _latency(after_tool[found >= HIT_THRESHOLD])
+        summary["cache_miss"] = _latency(after_tool[found < HIT_THRESHOLD])
     return summary
 
 

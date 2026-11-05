@@ -227,6 +227,17 @@ def test_peak_kv_usage_reads_real_metric_name(tmp_path):
     assert peak_kv_usage(tmp_path / "missing.jsonl") is None
 
 
+def test_hits_and_misses_are_reported_separately():
+    data = rows(4, 0.1) + rows(2, 30.0)
+    for row in data[4:]:
+        row["cached_tokens"] = 0
+    summary = summarize_replay(pd.DataFrame(data))
+    assert summary["cache_hit"]["n"] == 4
+    assert summary["cache_hit"]["ttft_p50_ms"] == pytest.approx(100)
+    assert summary["cache_miss"]["n"] == 2
+    assert summary["cache_miss"]["ttft_p50_ms"] == pytest.approx(30000)
+
+
 def test_counter_changes_are_measured_from_the_first_sample(tmp_path):
     path = tmp_path / "m.jsonl"
     name = 'vllm:external_prefix_cache_hits_total{engine="0"}'
