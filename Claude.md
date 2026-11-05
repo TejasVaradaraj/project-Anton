@@ -100,8 +100,14 @@ Week 0 setup is mostly done; SETUP.md has the verified state and the limitations
 **Week 1 is done, measured on the A100** (run `20261105T074136Z_a100_llama31_8b`, results in the README). 62/62 requests
 valid, and `vllm bench serve` agrees. Scope change: Kaggle stays a Qwen test bed, so the plan's T4 + 3B run was dropped.
 Prefill cost per token RISES with length, so don't quote a single prefill rate: use `by_prompt_length` in analysis.json.
-The cause isn't known yet. NEXT: Week 2 (trace generators and replayer). To get an A100, reuse the Drive notebook
-Project-Anton.ipynb; a new notebook got an L4 instead. Chrome saves downloads to the Desktop on this Mac.
+The cause isn't known yet. To get an A100, reuse the Drive notebook Project-Anton.ipynb; a new notebook got an L4
+instead. Chrome saves downloads to the Desktop on this Mac.
+
+**Week 2 is built, tested on the fake server only.** `anton replay run|analyze|sweep`, trace generators, system monitor,
+goodput analysis. **No real replay results exist yet.** Still open: run `configs/replay/week2_agent_load.yaml` on the A100
+(needs approval), calibrate trace numbers against public SWE-agent logs (all current values are plan assumptions), and the
+optional Datadog push. Known issue: at 500-3k tokens per tool output, sessions hit the 32k limit after 11-19 turns, so the
+plan's 10-40 steps can't be reached. Calibration should settle this.
 
 Commands: `uv run pytest`, `uv run ruff check .`, `uv run anton --help`.
 

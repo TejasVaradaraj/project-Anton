@@ -9,8 +9,8 @@ prefetching it back works, and how fast the storage must be for that to pay off.
 
 ## Status
 
-**Week 1 of 8: first measurements done.** Everything else on the roadmap is still ahead, including
-all of the offloading itself. See [SETUP.md](SETUP.md) for what has been verified and the known
+**Week 1 of 8 is done, with real measurements. The Week 2 trace-replay harness is built but has only
+run against a fake server, so it has no real results yet.** The offloading itself is still ahead. See [SETUP.md](SETUP.md) for what has been verified and the known
 limitations.
 
 ## Week 1 result: what the prefix cache saves
@@ -93,12 +93,23 @@ uv run anton server stop --config configs/servers/t4_qwen05b.yaml
 
 Rerunning with the same `--run-id` continues a stopped run.
 
+To replay a workload, or a sweep that skips points already finished:
+
+```bash
+uv run anton replay run --server configs/servers/a100_llama31_8b.yaml --trace configs/traces/agent.yaml --run-id my-replay
+```
+
+```bash
+uv run anton replay sweep --server configs/servers/a100_llama31_8b.yaml --sweep configs/replay/week2_agent_load.yaml
+```
+
 ## Layout
 
 | Path | Contents |
 |---|---|
-| `src/project_anton/harness/` | Streaming client, sweep runner, server control, run logging |
-| `src/project_anton/analysis/` | KV size math, summaries, prefill fit, plots |
+| `src/project_anton/harness/` | Streaming client, sweep and replay runners, server control, system monitor, run logging |
+| `src/project_anton/traces/` | Seeded agent, multi-turn and long-context workloads |
+| `src/project_anton/analysis/` | KV size math, summaries, goodput, prefill fit, plots |
 | `configs/` | Server and sweep settings |
 | `notebooks/` | Kaggle and Colab entry points |
 | `tests/` | Unit tests, plus a fake vLLM server on a real socket |
