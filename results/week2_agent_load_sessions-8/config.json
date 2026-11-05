@@ -1,0 +1,34 @@
+{
+  "run_id": "week2_agent_load_sessions-8",
+  "server": {
+    "kv_shape": {
+      "dtype_bytes": 2,
+      "head_dim": 128,
+      "kv_heads": 8,
+      "layers": 32
+    },
+    "model": "meta-llama/Llama-3.1-8B-Instruct",
+    "name": "a100_llama31_8b",
+    "port": 8000,
+    "token_id_range": [
+      0,
+      128000
+    ],
+    "vllm_args": {
+      "dtype": "bfloat16",
+      "enable-prefix-caching": true,
+      "enable-prompt-tokens-details": true,
+      "max-model-len": 32768
+    }
+  },
+  "trace": {
+    "arrival_rate_per_s": 0.2,
+    "kind": "agent",
+    "max_context_tokens": 32000,
+    "name": "agent",
+    "params": {},
+    "pause_scale": 1.0,
+    "seed": 0,
+    "sessions": 8
+  }
+}

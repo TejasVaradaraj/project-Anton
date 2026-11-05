@@ -63,8 +63,8 @@ Cross-check (arithmetic only): 461,216 tokens x 128 KiB/token = 56.30 GiB, and
 `tests/test_kv_math.py` pins them.
 
 **Colab can silently hand you a different GPU.** On 2026-11-05 a new runtime asked for an A100 and
-got an L4, with only a small popup saying so. An existing A100 session was still available in
-another notebook. Check `nvidia-smi` or `env.json` before trusting a run, and delete any fallback
+got an L4, with only a small popup saying so. The Project-Anton notebook did get an A100, but its
+accelerator setting had reverted to CPU after a runtime was deleted, so check that first too. Check `nvidia-smi` or `env.json` before trusting a run, and delete any fallback
 runtime, since it uses units too.
 
 The earlier plan assumed a 40 GB A100. This one has 80 GB, so 8B fits far more KV cache than
@@ -108,16 +108,16 @@ to AWS if the module test above works. Any Soft-RoCE result stays labeled as emu
 ## Software test results (2026-11-05)
 | Check | Result |
 |---|---|
-| `pytest`, Python 3.14 (macOS) | 146 passed |
-| `pytest`, Python 3.12 (macOS) | 146 passed |
+| `pytest`, Python 3.14 (macOS) | 147 passed |
+| `pytest`, Python 3.12 (macOS) | 147 passed |
 | `ruff check` | Passed |
 | Fresh clone, notebook's install steps, Python 3.12 | `anton --help` and imports work |
 | Fake server set to 33,333 tokens/s | Pipeline measured 33,099 tokens/s (0.7% off) |
 | Notebook code on Colab A100 | Server, sweep, analysis, cross-check and stop cells all ran (found 2 bugs, both fixed) |
 | Notebook's Google Drive and archive cells | **Not run** (results were saved locally and downloaded) |
 | Notebook on Kaggle | **Not run** |
-| GitHub Actions CI | Passed on the Week 1 pull request; Week 2 branch not pushed yet |
-| Week 2 replay on a real server | **Not run** |
+| GitHub Actions CI | Passed on the Week 1 pull request; Week 2 branch has no pull request yet |
+| Week 2 replay sweep on Colab A100 | Ran: 4 points, 211/211 requests valid, GPU, disk, network and vLLM monitors all recorded |
 
 These check the software only. The fake server's numbers are not performance measurements.
 

@@ -9,8 +9,9 @@ prefetching it back works, and how fast the storage must be for that to pay off.
 
 ## Status
 
-**Week 1 of 8 is done, with real measurements. The Week 2 trace-replay harness is built but has only
-run against a fake server, so it has no real results yet.** The offloading itself is still ahead. See [SETUP.md](SETUP.md) for what has been verified and the known
+**Week 1 of 8 is done. The Week 2 trace-replay harness has run on a real A100, but its traces aren't
+calibrated yet, so that run tests the harness and isn't a result about real agents.** The offloading
+itself is still ahead. See [SETUP.md](SETUP.md) for what has been verified and the known
 limitations.
 
 ## Week 1 result: what the prefix cache saves
@@ -46,6 +47,27 @@ cell. All 62 requests passed the validity checks.
   to a longer context, but that is only a hypothesis so far.
 - This is one session on one shared GPU with 5 repeats per cell, one request at a time, using random
   token IDs. It says nothing about load, and it's a smaller model than Llama-3.3-70B.
+
+## Week 2 check: agent replay on a real server
+
+Same A100 and model, using the [agent trace](configs/traces/agent.yaml). **Token counts and pauses are
+uncalibrated plan assumptions**, so this shows the harness works and doesn't describe real agents.
+All 211 requests were valid, and every request met the TTFT under 2 s and TPOT under 100 ms targets.
+
+| Sessions | Requests | Peak concurrent | Output tokens/s | Post-tool TTFT p50 (ms) | Post-tool TTFT p95 (ms) | TPOT p50 (ms) | Previous prompt cached | Final contexts vs KV capacity |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 15 | 1 | 20.0 | 247.3 | not enough samples | 12.33 | 99.94% | 7% |
+| 2 | 27 | 2 | 26.0 | 228.0 | 421.1 | 11.93 | 99.94% | 11% |
+| 4 | 51 | 3 | 49.1 | 259.0 | 437.5 | 12.34 | 99.93% | 23% |
+| 8 | 118 | 4 | 68.1 | 263.3 | 448.4 | 13.30 | 99.94% | 50% |
+
+- **No cliff yet, as expected.** Each turn still found its previous prompt in the cache, and 8 sessions
+  fill about half of the KV capacity. Week 3 needs well over 16 sessions of this size to force eviction.
+- **Latency barely moved with load**, because at most 4 requests overlapped. These runs don't reach
+  the server's limits, so the goodput numbers here equal throughput and say nothing about its capacity.
+- **Peak `vllm:kv_cache_usage_perc` was only 13%.** It looks like it counts running requests only, so
+  it isn't a measure of how full the cache is. "Previous prompt cached" is the better early signal.
+- Each row is one short run. Sweep points shared one server, one after another.
 
 ## What gets measured
 
