@@ -1,6 +1,8 @@
-"""Final GPU runs: chunk alignment test, then the repeat sweep near the cliff, with and without offload.
+"""Final GPU runs: the chunk alignment test, then a repeat sweep near the cliff.
 
-Run from the repo root on a GPU machine: uv run python scripts/week7_final.py --results-dir results/week7
+Run from the repo root on a GPU machine:
+
+    uv run python scripts/week7_final.py --results-dir results/week7
 """
 
 import argparse

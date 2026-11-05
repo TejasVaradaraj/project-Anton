@@ -56,8 +56,8 @@ def summarize_tier(df: pd.DataFrame, shape: ModelShape, tier: str) -> pd.DataFra
                 ),
                 "load_ms": load_s * 1000,
                 "saved_vs_cold_ms": (cold - evicted) * 1000,
-                # vLLM's counter also counts tokens already on the GPU, so check the speed too. A rate
-                # above what the GPU's PCIe link can carry means nothing was really loaded.
+                # vLLM's counter also counts tokens already on the GPU, so check the speed too.
+                # A rate above what the GPU's PCIe link can carry means nothing really loaded.
                 "served_from_tier": bool(hits.median() > 0)
                 and load_s > 0
                 and size / load_s <= MAX_PLAUSIBLE_BYTES_PER_S,
