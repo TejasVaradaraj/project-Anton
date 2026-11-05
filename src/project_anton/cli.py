@@ -9,6 +9,7 @@ from pathlib import Path
 
 from project_anton.analysis.cliff import compare_sweeps
 from project_anton.analysis.replay import analyze_replay
+from project_anton.analysis.requirements import build_requirements
 from project_anton.analysis.scenarios import compare_scenarios
 from project_anton.analysis.tiers import compare_tiers
 from project_anton.analysis.ttft import analyze_run
@@ -162,6 +163,12 @@ def replay_scenarios(args) -> int:
     return 0
 
 
+def requirements(args) -> int:
+    table = build_requirements(Path(args.week1), Path(args.calibration), Path(args.out))
+    print(table.to_string(index=False))
+    return 0
+
+
 def proxy_serve(args) -> int:
     import uvicorn
 
@@ -276,6 +283,12 @@ def build_parser() -> argparse.ArgumentParser:
     scenarios.add_argument("--run", action="append", required=True, help="name=run folder")
     scenarios.add_argument("--out", required=True)
     scenarios.set_defaults(func=replay_scenarios)
+
+    need = groups.add_parser("requirements", help="storage requirements table")
+    need.add_argument("--week1", required=True, help="a Week 1 analysis.json")
+    need.add_argument("--calibration", default="configs/traces/calibration/swe_agent.json")
+    need.add_argument("--out", required=True)
+    need.set_defaults(func=requirements)
 
     proxy = groups.add_parser("proxy", help="agent-aware prefetch proxy").add_subparsers(
         required=True
