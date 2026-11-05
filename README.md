@@ -104,6 +104,23 @@ Calibrated agents arriving at 1 per second, on the full 56 GiB GPU KV cache, wit
   fixed now. Most points lost 0-2 requests, but LMCache at 64 sessions lost 11 sessions' remaining
   requests, sending 13% less load, so that row isn't a fair comparison.
 
+## Week 5 check: NVMe-oF on a local VM
+
+A RAM disk served over NVMe-oF with real Linux kernel drivers, in a Linux VM on a Mac, read with fio at
+LMCache's 32 MiB chunk size. Results are in [`results/week5_mac_vm_lab`](results/week5_mac_vm_lab).
+
+| Path | Read, 32 MiB chunks (GB/s) | Mean latency, 4 KiB at depth 1 (us) |
+|---|---:|---:|
+| RAM disk, no protocol | 32.5 | 0.9 |
+| NVMe-oF over TCP | 6.4 | 8.6 |
+| NVMe-oF over Soft-RoCE (emulated RDMA) | 1.7 | 46.7 |
+
+**This shows the protocols run end to end, and roughly what the software path costs. It doesn't
+measure a network.** Two VMs couldn't reach each other on this Mac's virtual network, so the target and
+initiator share one VM and no packet crosses even a virtual NIC. Real networks would add latency and
+limit bandwidth. Soft-RoCE is software emulation, so it says nothing about RDMA hardware, and it's only
+slower than TCP here because it does in software what a real RDMA NIC does in hardware.
+
 ## Agent trace calibration
 
 Measured from 20,008 real runs in
