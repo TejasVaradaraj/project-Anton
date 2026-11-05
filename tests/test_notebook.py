@@ -50,5 +50,11 @@ def test_notebook_refers_to_configs_that_exist():
         assert (ROOT / "configs" / "sweeps" / f"week1_{name}.yaml").exists()
 
 
+def test_notebook_shows_command_output():
+    # A real Colab run printed nothing for commands that ran without a pipe.
+    source = "\n".join(code_cells(ROOT / "notebooks" / "week1_ttft.ipynb"))
+    assert "stdout=subprocess.PIPE" in source
+
+
 def test_notebook_stops_the_server_last():
     assert 'server", "stop"' in code_cells(ROOT / "notebooks" / "week1_ttft.ipynb")[-1]
