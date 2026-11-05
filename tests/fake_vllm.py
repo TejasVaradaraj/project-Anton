@@ -62,8 +62,8 @@ class FakeVllm:
                     self._send_json(writer, 200, {"data": data})
                 elif method == "GET" and path == "/metrics":
                     text = (
-                        "# HELP vllm:gpu_cache_usage_perc usage\n"
-                        f'vllm:gpu_cache_usage_perc{{model_name="{self.model}"}} 0.25\n'
+                        "# HELP vllm:kv_cache_usage_perc usage\n"
+                        f'vllm:kv_cache_usage_perc{{model_name="{self.model}"}} 0.25\n'
                         f"vllm:num_requests_running {len(self.requests)}.0\n"
                         "python_gc_objects_collected_total 7.0\n"
                     ).encode()

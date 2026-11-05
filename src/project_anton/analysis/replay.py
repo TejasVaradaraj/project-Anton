@@ -78,10 +78,25 @@ def summarize_replay(df: pd.DataFrame, slo: dict[str, float] | None = None) -> d
     return summary
 
 
+def peak_kv_usage(metrics_path: Path) -> float | None:
+    """Highest vLLM KV usage seen. It looks like this counts running requests only, so it can
+    stay low while finished sessions still sit in the prefix cache. It isn't "how full"."""
+    values = [
+        value
+        for sample in read_jsonl(metrics_path)
+        for name, value in sample["metrics"].items()
+        if name.startswith("vllm:kv_cache_usage_perc")
+    ]
+    return max(values) if values else None
+
+
 def analyze_replay(run_dir: Path, slo: dict[str, float] | None = None) -> dict[str, Any]:
     df = load_replay(run_dir / "raw" / "requests.jsonl")
     if df.empty:
         raise ValueError(f"no requests recorded in {run_dir}")
     summary = {"run_id": str(df["run_id"].iloc[0]), **summarize_replay(df, slo)}
+    summary["peak_kv_usage_running"] = peak_kv_usage(
+        run_dir / "raw" / "sysmon" / "vllm_metrics.jsonl"
+    )
     write_json(run_dir / "replay_summary.json", summary)
     return summary

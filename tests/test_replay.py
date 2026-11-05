@@ -11,7 +11,7 @@ import yaml
 from fake_vllm import FakeVllm
 
 from project_anton.analysis.kv_math import ModelShape
-from project_anton.analysis.replay import analyze_replay, summarize_replay
+from project_anton.analysis.replay import analyze_replay, peak_kv_usage, summarize_replay
 from project_anton.harness.replay import (
     ReplaySweep,
     finished_sessions,
@@ -209,6 +209,17 @@ def test_analyze_replay_writes_summary(tmp_path):
     assert summary["after_tool"]["n"] == 6
     assert summary["after_tool"]["previous_prompt_cached_p50"] > 0.9
     assert json.loads((tmp_path / "replay_summary.json").read_text())["run_id"] == "r1"
+
+
+def test_peak_kv_usage_reads_real_metric_name(tmp_path):
+    path = tmp_path / "m.jsonl"
+    samples = [
+        {"t": 1, "metrics": {'vllm:kv_cache_usage_perc{engine="0"}': 0.1, "vllm:other": 9.0}},
+        {"t": 2, "metrics": {'vllm:kv_cache_usage_perc{engine="0"}': 0.3}},
+    ]
+    path.write_text("".join(json.dumps(x) + "\n" for x in samples))
+    assert peak_kv_usage(path) == 0.3
+    assert peak_kv_usage(tmp_path / "missing.jsonl") is None
 
 
 # --- Monitoring ---
