@@ -28,6 +28,13 @@ own `env.json`, which is the authoritative record for that run.
 | NVMe-oF target + Soft-RoCE on AWS | **Blocked on the tested image** (see AWS) |
 | Azure | **Blocked**: subscription restrictions stop VM creation |
 
+**iCloud problem on this Mac.** The repo is on an iCloud-synced Desktop, and iCloud marks files in
+`.venv` as hidden (it also leaves duplicates like `project_anton 2.pth`). Python 3.13+ skips hidden
+`.pth` files, so `import project_anton` and `uv run anton` fail on and off with
+`ModuleNotFoundError`. `uv run pytest` still works because `pyproject.toml` sets `pythonpath`.
+The lasting fix is to keep the virtualenv out of iCloud by adding this to `~/.zshrc`:
+`export UV_PROJECT_ENVIRONMENT="$HOME/.venvs/project-Anton"`. Kaggle, Colab and CI aren't affected.
+
 ## Kaggle (2x T4)
 | Item | Value |
 |---|---|
