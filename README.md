@@ -9,9 +9,9 @@ prefetching it back works, and how fast the storage must be for that to pay off.
 
 ## Status
 
-**Week 1 of 8 is done. The Week 2 trace-replay harness has run on a real A100, but its traces aren't
-calibrated yet, so that run tests the harness and isn't a result about real agents.** The offloading
-itself is still ahead. See [SETUP.md](SETUP.md) for what has been verified and the known
+**Week 1 of 8 is done. Week 2's harness has run on a real A100, and its agent trace is now calibrated
+from real agent runs, though that calibrated trace hasn't been replayed on a GPU yet.** Tool pause
+times remain assumptions. The offloading itself is still ahead. See [SETUP.md](SETUP.md) for what has been verified and the known
 limitations.
 
 ## Week 1 result: what the prefix cache saves
@@ -50,8 +50,9 @@ cell. All 62 requests passed the validity checks.
 
 ## Week 2 check: agent replay on a real server
 
-Same A100 and model, using the [agent trace](configs/traces/agent.yaml). **Token counts and pauses are
-uncalibrated plan assumptions**, so this shows the harness works and doesn't describe real agents.
+Same A100 and model, using the [plan's numbers](configs/traces/agent_plan_assumptions.yaml), run before
+calibration showed they were too large. **So this shows the harness works and doesn't describe real
+agents.**
 All 211 requests were valid, and every request met the TTFT under 2 s and TPOT under 100 ms targets.
 
 | Sessions | Requests | Peak concurrent | Output tokens/s | Post-tool TTFT p50 (ms) | Post-tool TTFT p95 (ms) | TPOT p50 (ms) | Previous prompt cached | Final contexts vs KV capacity |
@@ -62,12 +63,53 @@ All 211 requests were valid, and every request met the TTFT under 2 s and TPOT u
 | 8 | 118 | 4 | 68.1 | 263.3 | 448.4 | 13.30 | 99.94% | 50% |
 
 - **No cliff yet, as expected.** Each turn still found its previous prompt in the cache, and 8 sessions
-  fill about half of the KV capacity. Week 3 needs well over 16 sessions of this size to force eviction.
+  fill about half of the KV capacity.
 - **Latency barely moved with load**, because at most 4 requests overlapped. These runs don't reach
   the server's limits, so the goodput numbers here equal throughput and say nothing about its capacity.
 - **Peak `vllm:kv_cache_usage_perc` was only 13%.** It looks like it counts running requests only, so
   it isn't a measure of how full the cache is. "Previous prompt cached" is the better early signal.
 - Each row is one short run. Sweep points shared one server, one after another.
+
+## Agent trace calibration
+
+Measured from 20,008 real runs in
+[`nebius/SWE-agent-trajectories`](https://huggingface.co/datasets/nebius/SWE-agent-trajectories)
+(CC BY 4.0, 3 of 12 shards). Full numbers are in
+[`swe_agent.json`](configs/traces/calibration/swe_agent.json).
+
+| Measure | Plan assumed | Measured median (p90) |
+|---|---:|---:|
+| Shared system prefix | ~3,000 tokens | 1,119 |
+| Steps per session | 10-40 | 17 (50) |
+| Model response | 50-300 tokens | 78 (192) |
+| Edit output, 37% of tools | 500-3,000 tokens | 410 (1,253) |
+| Search output, 25% | 500-3,000 tokens | 54 (163) |
+| Read output, 19% | 500-3,000 tokens | 1,101 (1,389) |
+| Run output, 19% | 500-3,000 tokens | 85 (375) |
+| Final context | 15k-40k tokens | 11,788 (30,337) |
+
+**Does the trace reproduce real sessions?** Final context wasn't an input, so it's a fair check:
+
+| Final context (tokens) | p10 | p50 | p75 | p90 |
+|---|---:|---:|---:|---:|
+| Real runs | 5,460 | 11,788 | 28,335 | 30,337 |
+| Calibrated trace | 5,175 | 12,038 | 21,548 | 30,902 |
+| Plan's numbers | 25,709 | 30,717 | 31,392 | 31,748 |
+
+**Known gaps**
+- **Tool pauses aren't calibrated.** This dataset has no timing. Of 8 others, 6 showed no per-tool
+  timing fields in their first rows, 1 returned a server error, and 1 keeps traces in separate files
+  that weren't opened. Pause times are still assumptions, and they matter for when offloading pays off.
+- **Long sessions are too rare.** p75 is low by 24%, and 16% of simulated sessions end near the
+  context limit, against 30% of real ones. Real long sessions tend to have large outputs throughout,
+  but the trace draws each output independently.
+- **Token counts are approximate.** They use a public Qwen tokenizer because Llama's is gated. On this
+  text, Qwen and GPT-2 tokenizers differ by 36%, so the choice matters and should be rechecked.
+- **One agent.** These are SWE-agent runs from Llama models on one benchmark-style task set, so
+  they may not describe other agents. The run output may also be cut short by the agent itself.
+
+**What it means for Week 3:** sessions average about 15k tokens, so about 32 of them should fill the
+A100's 461,216-token KV cache. That's a prediction from arithmetic, and Week 3 will test it.
 
 ## What gets measured
 
@@ -132,7 +174,8 @@ uv run anton replay sweep --server configs/servers/a100_llama31_8b.yaml --sweep 
 | `src/project_anton/harness/` | Streaming client, sweep and replay runners, server control, system monitor, run logging |
 | `src/project_anton/traces/` | Seeded agent, multi-turn and long-context workloads |
 | `src/project_anton/analysis/` | KV size math, summaries, goodput, prefill fit, plots |
-| `configs/` | Server and sweep settings |
+| `configs/` | Server, sweep and trace settings, plus trace calibration data |
+| `scripts/` | Reruns the trace calibration |
 | `notebooks/` | Kaggle and Colab entry points |
 | `tests/` | Unit tests, plus a fake vLLM server on a real socket |
 | `results/<run_id>/` | Summaries in git; `raw/` stays out of git |
@@ -140,4 +183,5 @@ uv run anton replay sweep --server configs/servers/a100_llama31_8b.yaml --sweep 
 ## Prior work
 
 This builds on existing ideas and doesn't claim to have invented them: CachedAttention (USENIX ATC
-2024), Continuum (2025), vLLM PagedAttention, and LMCache.
+2024), Continuum (2025), vLLM PagedAttention, and LMCache. Agent traces are calibrated from Nebius's
+SWE-agent trajectories dataset.

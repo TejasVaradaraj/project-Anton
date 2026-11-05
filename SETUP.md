@@ -108,8 +108,8 @@ to AWS if the module test above works. Any Soft-RoCE result stays labeled as emu
 ## Software test results (2026-11-05)
 | Check | Result |
 |---|---|
-| `pytest`, Python 3.14 (macOS) | 147 passed |
-| `pytest`, Python 3.12 (macOS) | 147 passed |
+| `pytest`, Python 3.14 (macOS) | 182 passed |
+| `pytest`, Python 3.12 (macOS) | 182 passed |
 | `ruff check` | Passed |
 | Fresh clone, notebook's install steps, Python 3.12 | `anton --help` and imports work |
 | Fake server set to 33,333 tokens/s | Pipeline measured 33,099 tokens/s (0.7% off) |
@@ -129,8 +129,9 @@ These check the software only. The fake server's numbers are not performance mea
 - **Kaggle/Colab can't load kernel modules.** Storage-protocol work has to run on a VM.
 - **Shared machines.** Kaggle and Colab are shared and virtualized, and the benchmark client runs
   on the same machine as the server, so expect noise. Report spread, not just averages.
-- **Uncalibrated traces.** Week 2 token counts and pause times are assumptions from the plan, not
-  fitted to real agent logs. With them, sessions hit the 32k limit after 11-19 turns, not 10-40.
+- **Partly calibrated traces.** Agent token counts and steps come from real SWE-agent runs, but tool
+  pauses are still assumptions because no dataset fully checked has timing. Multi-turn and long-context
+  traces aren't calibrated at all. The README has the other gaps.
 - **Replay recomputes each response.** Prompts include the trace's response tokens so runs repeat
   exactly, but the model generates different tokens, so its cached response can't match. Each turn
   recomputes one response that a real agent wouldn't, which makes post-tool TTFT slightly pessimistic.

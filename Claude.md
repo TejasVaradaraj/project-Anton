@@ -103,10 +103,11 @@ Prefill cost per token RISES with length, so don't quote a single prefill rate: 
 The cause isn't known yet. To get an A100, reuse the Drive notebook Project-Anton.ipynb; a new notebook got an L4
 instead. Chrome saves downloads to the Desktop on this Mac.
 
-**Week 2 harness has run on the real A100** (`results/week2_agent_load_sessions-*`, table in README): 211/211 valid, no
-eviction yet, and it's a harness check, not a result, because traces are uncalibrated. Still open: calibrate trace numbers
-against public SWE-agent logs, the optional Datadog push. Known issue: at 500-3k tokens per tool output, sessions hit the 32k
-limit after 11-19 turns, so the plan's 10-40 steps can't be reached. Week 3 needs well over 16 sessions to force eviction.
+**Week 2 harness has run on the real A100** (`results/week2_agent_load_sessions-*`, README table): 211/211 valid, no eviction,
+using the plan's numbers, which calibration later showed were too large. `configs/traces/agent.yaml` is now calibrated from
+20,008 SWE-agent runs (`scripts/calibrate_traces.py`, README section), but hasn't been replayed on a GPU. Still open: tool pauses
+are assumptions (no timing found in datasets checked; `melissapan/swe-bench-lite-agent-traces-v14` trace files not opened yet), recheck token counts with Llama's gated tokenizer, optional Datadog push.
+NEXT: Week 3. About 32 calibrated sessions should fill the A100's KV cache (a prediction), so sweep across that point.
 Tejasvi manages shutting down the A100 runtime themself: never delete or disconnect it unless asked. Colab's accelerator
 setting can revert to CPU after a runtime is deleted, so check it before running.
 
