@@ -81,6 +81,38 @@ def test_committed_configs_exist():
     assert list((CONFIGS / "sweeps").glob("*.yaml"))
 
 
+@pytest.mark.parametrize("key", ["HF_TOKEN", "DD_API_KEY", "MY_SECRET", "db_password"])
+def test_config_with_secret_env_is_refused(tmp_path, key):
+    path = tmp_path / "c.yaml"
+    path.write_text(
+        f"name: x\nmodel: m\ntoken_id_range: [0, 10]\nenv: {{{key}: abc}}\n"
+        "kv_shape: {layers: 1, kv_heads: 1, head_dim: 1}\n"
+    )
+    with pytest.raises(ValueError, match="environment"):
+        load_server_config(path)
+
+
+def test_lmcache_config_passes_connector_and_env():
+    cfg = load_server_config(CONFIGS / "servers" / "a100_llama31_8b_lmcache.yaml")
+    assert cfg.env["LMCACHE_LOCAL_CPU"] == "True"
+    command = build_command(cfg)
+    assert "LMCacheConnectorV1" in command[command.index("--kv-transfer-config") + 1]
+    # Only offload may differ from the plain server, or the comparison means nothing.
+    plain = load_server_config(CONFIGS / "servers" / "a100_llama31_8b.yaml")
+    assert cfg.model == plain.model
+    assert {k: v for k, v in cfg.vllm_args.items() if k != "kv-transfer-config"} == plain.vllm_args
+
+
+def test_started_server_gets_config_env_and_inherits_the_rest(tmp_path, monkeypatch):
+    monkeypatch.setenv("INHERITED", "yes")
+    script = "import os; print(os.environ['INHERITED'], os.environ['FROM_CONFIG'])"
+    cfg = ServerConfig("t", "m", 1, {}, (0, 10), SHAPE, env={"FROM_CONFIG": "set"})
+    log = tmp_path / "s.log"
+    proc = start_server(cfg, log, tmp_path / "s.pid", command=[sys.executable, "-c", script])
+    proc.wait(timeout=15)
+    assert log.read_text().strip() == "yes set"
+
+
 # --- Log parsing ---
 
 

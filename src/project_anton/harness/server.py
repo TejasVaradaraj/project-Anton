@@ -5,7 +5,7 @@ import re
 import signal
 import subprocess
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +16,7 @@ from project_anton.analysis.kv_math import ModelShape
 
 # Secrets reach vLLM through the environment. They must never sit in a config file.
 FORBIDDEN_ARGS = ("hf-token", "api-key")
+SECRET_NAME = re.compile(r"TOKEN|SECRET|PASSWORD|API_?KEY", re.I)
 
 KV_CAPACITY_RE = re.compile(
     r"(?P<pool>\S+) KV cache size: (?P<tokens>[\d,]+) tokens, "
@@ -31,6 +32,7 @@ class ServerConfig:
     vllm_args: dict[str, Any]
     token_id_range: tuple[int, int]
     kv_shape: ModelShape
+    env: dict[str, str] = field(default_factory=dict)
 
     @property
     def base_url(self) -> str:
@@ -43,6 +45,10 @@ def load_server_config(path: str | Path) -> ServerConfig:
     for key in args:
         if key in FORBIDDEN_ARGS:
             raise ValueError(f"{key} must come from the environment, not from {path}")
+    env = {key: str(value) for key, value in (raw.get("env") or {}).items()}
+    for key in env:
+        if SECRET_NAME.search(key):
+            raise ValueError(f"{key} must come from the environment, not from {path}")
     low, high = raw["token_id_range"]
     return ServerConfig(
         name=raw["name"],
@@ -51,6 +57,7 @@ def load_server_config(path: str | Path) -> ServerConfig:
         vllm_args=args,
         token_id_range=(low, high),
         kv_shape=ModelShape(**raw["kv_shape"]),
+        env=env,
     )
 
 
@@ -109,6 +116,7 @@ def start_server(
             stdout=log,
             stderr=subprocess.STDOUT,
             start_new_session=True,
+            env={**os.environ, **cfg.env},
         )
     pid_path.write_text(str(proc.pid))
     return proc

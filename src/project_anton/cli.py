@@ -7,6 +7,7 @@ import shutil
 import sys
 from pathlib import Path
 
+from project_anton.analysis.cliff import compare_sweeps
 from project_anton.analysis.replay import analyze_replay
 from project_anton.analysis.ttft import analyze_run
 from project_anton.harness.replay import load_replay_sweep, run_grid, run_replay
@@ -143,6 +144,12 @@ def replay_sweep(args) -> int:
     return 0
 
 
+def replay_compare(args) -> int:
+    table = compare_sweeps(Path(args.results_dir), args.sweep, Path(args.out))
+    print(table.to_string(index=False))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="anton", description=__doc__)
     groups = parser.add_subparsers(required=True)
@@ -187,6 +194,12 @@ def build_parser() -> argparse.ArgumentParser:
     grid.add_argument("--sweep", required=True)
     grid.add_argument("--results-dir", default="results")
     grid.set_defaults(func=replay_sweep)
+
+    compare = replay.add_parser("compare", help="tabulate and plot finished sweeps")
+    compare.add_argument("--sweep", action="append", required=True, help="repeat for each sweep")
+    compare.add_argument("--results-dir", default="results")
+    compare.add_argument("--out", required=True)
+    compare.set_defaults(func=replay_compare)
     return parser
 
 

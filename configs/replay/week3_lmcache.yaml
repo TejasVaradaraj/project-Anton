@@ -1,0 +1,6 @@
+# The same load with LMCache CPU offload, for comparison with week3_gpu_only.
+name: week3_lmcache
+trace: configs/traces/agent.yaml
+grid:
+  arrival_rate_per_s: [1.0]
+  sessions: [8, 16, 24, 32, 48, 64, 96]
