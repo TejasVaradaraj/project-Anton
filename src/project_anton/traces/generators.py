@@ -83,8 +83,11 @@ def _rng(*key: object) -> np.random.Generator:
     return np.random.default_rng(int.from_bytes(digest[:8], "big"))
 
 
-def _between(rng: np.random.Generator, bounds: list[int]) -> int:
-    return int(rng.integers(bounds[0], bounds[1] + 1))
+def _draw(rng: np.random.Generator, spec: list[int] | dict[str, list[float]]) -> int:
+    """Draw from [low, high], or from a table of measured percentiles."""
+    if isinstance(spec, dict):
+        return max(1, round(float(np.interp(rng.random(), spec["probs"], spec["values"]))))
+    return int(rng.integers(spec[0], spec[1] + 1))
 
 
 def _conversation(cfg: TraceConfig, params: dict[str, Any], rng, index: int) -> Session:
@@ -96,17 +99,17 @@ def _conversation(cfg: TraceConfig, params: dict[str, Any], rng, index: int) -> 
     prefix = params["prefix_tokens"]
     context = prefix
     turns = []
-    for step in range(_between(rng, params["steps"])):
-        response = _between(rng, params["response_tokens"])
+    for step in range(_draw(rng, params["steps"])):
+        response = _draw(rng, params["response_tokens"])
         if step == 0:
             tool, pause = None, 0.0
-            new = _between(rng, params["first_turn_tokens"])
+            new = _draw(rng, params["first_turn_tokens"])
         else:
             tool = str(rng.choice(names, p=weights))
             spec = tools[tool]
             pause = float(rng.lognormal(math.log(spec["median_s"]), spec["sigma"]))
             pause *= cfg.pause_scale
-            new = _between(rng, params["tool_output_tokens"])
+            new = _draw(rng, spec.get("output_tokens", params.get("tool_output_tokens")))
         if context + new + response > cfg.max_context_tokens:
             break  # The session ends when it runs out of context, as a real one must
         turns.append(Turn(new, response, pause, tool))
@@ -115,7 +118,7 @@ def _conversation(cfg: TraceConfig, params: dict[str, Any], rng, index: int) -> 
 
 
 def _long_context(cfg: TraceConfig, params: dict[str, Any], rng, index: int) -> Session:
-    response = _between(rng, params["response_tokens"])
+    response = _draw(rng, params["response_tokens"])
     limit = cfg.max_context_tokens - response
     drawn = rng.lognormal(math.log(params["median_prompt_tokens"]), params["prompt_sigma"])
     prompt = int(min(max(drawn, 16), limit))

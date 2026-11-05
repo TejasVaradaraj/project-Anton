@@ -1,10 +1,13 @@
+import json
 from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
 import pytest
 
 from project_anton.traces.generators import (
     TraceConfig,
+    _draw,
     generate_trace,
     load_trace_config,
     session_prompts,
@@ -139,3 +142,70 @@ def test_committed_trace_configs_generate(name):
     cfg = load_trace_config(f"configs/traces/{name}.yaml")
     assert cfg.kind == name
     assert generate_trace(cfg)
+
+
+# --- Calibration ---
+
+
+def calibrated() -> tuple[TraceConfig, dict]:
+    cfg = load_trace_config("configs/traces/agent.yaml")
+    real = json.loads(Path("configs/traces/calibration/swe_agent.json").read_text())
+    return cfg, real
+
+
+def test_percentile_table_is_sampled_faithfully():
+    # Half the draws fall below the p50 entry, and no draw exceeds the top of the table.
+    table = {"probs": [0.0, 0.5, 1.0], "values": [10, 100, 1000]}
+    rng = np.random.default_rng(0)
+    draws = [_draw(rng, table) for _ in range(5000)]
+    assert np.median(draws) == pytest.approx(100, rel=0.1)
+    assert min(draws) >= 10 and max(draws) <= 1000
+
+
+def test_uniform_bounds_still_work():
+    rng = np.random.default_rng(0)
+    assert {_draw(rng, [3, 4]) for _ in range(50)} == {3, 4}
+
+
+def test_tool_with_own_output_table_uses_it():
+    tools = {
+        "big": {"weight": 1.0, "median_s": 1.0, "sigma": 0.1, "output_tokens": [900, 900]},
+    }
+    trace = generate_trace(replace(AGENT, sessions=2, params={"tools": tools}))
+    assert all(t.new_tokens == 900 for s in trace for t in s.turns[1:])
+
+
+def test_agent_config_matches_calibration_file():
+    cfg, real = calibrated()
+    assert cfg.params["prefix_tokens"] == real["fit"]["prefix_tokens"]
+    assert cfg.params["steps"]["values"] == pytest.approx(real["fit"]["steps"]["values"], abs=1)
+    for name, tool in real["tools"].items():
+        spec = cfg.params["tools"][name]
+        assert spec["weight"] == pytest.approx(tool["share"], abs=0.001)
+        assert spec["output_tokens"]["values"] == pytest.approx(tool["fit"]["values"], abs=1)
+
+
+def test_simulated_sessions_resemble_real_ones():
+    """The trace should reproduce real sessions it wasn't directly given, like final context."""
+    cfg, real = calibrated()
+    trace = generate_trace(replace(cfg, sessions=3000))
+    final = [
+        s.prefix_tokens + sum(t.new_tokens + t.response_tokens for t in s.turns) for s in trace
+    ]
+    steps = [len(s.turns) for s in trace]
+    for p in (10, 50, 90):
+        assert np.percentile(final, p) == pytest.approx(
+            real["final_context_tokens"][f"p{p}"], rel=0.10
+        )
+    assert np.median(steps) == pytest.approx(real["steps"]["p50"], rel=0.15)
+
+
+def test_old_plan_numbers_do_not_resemble_real_sessions():
+    """Why calibration was needed. If this ever fails, the check above has lost its meaning."""
+    cfg, real = calibrated()
+    old = load_trace_config("configs/traces/agent_plan_assumptions.yaml")
+    trace = generate_trace(replace(old, sessions=500))
+    final = [
+        s.prefix_tokens + sum(t.new_tokens + t.response_tokens for t in s.turns) for s in trace
+    ]
+    assert np.median(final) > 2 * real["final_context_tokens"]["p50"]

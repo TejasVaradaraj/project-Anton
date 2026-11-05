@@ -1,0 +1,7 @@
+# The original plan numbers, kept for reference. Calibration found these too large: use agent.yaml.
+name: agent
+kind: agent
+sessions: 8
+arrival_rate_per_s: 0.2
+seed: 0
+max_context_tokens: 32000
