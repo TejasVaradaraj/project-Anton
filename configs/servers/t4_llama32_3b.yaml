@@ -1,0 +1,11 @@
+# Week 1 development model. Not yet confirmed to serve on T4: the first run will tell.
+name: t4_llama32_3b
+model: meta-llama/Llama-3.2-3B-Instruct
+port: 8000
+vllm_args:
+  dtype: half # T4 has no bf16
+  max-model-len: 16384
+  enable-prefix-caching: true
+  enable-prompt-tokens-details: true
+token_id_range: [0, 128000] # IDs from 128000 up are special tokens
+kv_shape: { layers: 28, kv_heads: 8, head_dim: 128, dtype_bytes: 2 }

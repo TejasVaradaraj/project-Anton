@@ -1,0 +1,7 @@
+# Same experiment on the headline model, extended to its 32k context.
+name: ttft
+prompt_lengths: [1000, 2000, 4000, 8000, 16000, 32000]
+reps: 5
+max_tokens: 32
+warmup_requests: 2
+seed: 0

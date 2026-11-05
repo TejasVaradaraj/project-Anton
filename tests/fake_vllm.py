@@ -25,6 +25,7 @@ class FakeVllm:
     prompt_tokens_details: bool = True
     requests: list[dict] = field(default_factory=list)
     _cached: set = field(default_factory=set)
+    _writers: set = field(default_factory=set)
     _server: asyncio.Server | None = None
 
     async def __aenter__(self) -> "FakeVllm":
@@ -33,7 +34,9 @@ class FakeVllm:
 
     async def __aexit__(self, *exc) -> None:
         self._server.close()
-        self._server.close_clients()
+        # Close open connections by hand: Server.close_clients() needs Python 3.13.
+        for writer in list(self._writers):
+            writer.close()
         await self._server.wait_closed()
 
     @property
@@ -42,6 +45,7 @@ class FakeVllm:
         return f"http://127.0.0.1:{port}"
 
     async def _handle(self, reader, writer) -> None:
+        self._writers.add(writer)
         try:
             while True:
                 head = await reader.readuntil(b"\r\n\r\n")
@@ -64,6 +68,7 @@ class FakeVllm:
         except (asyncio.IncompleteReadError, ConnectionError):
             pass
         finally:
+            self._writers.discard(writer)
             writer.close()
 
     def _send_json(self, writer, status: int, obj: dict) -> None:
@@ -80,14 +85,15 @@ class FakeVllm:
         writer.write(f"{len(line):x}\r\n".encode() + line + b"\r\n")
         await writer.drain()
 
-    def _cached_prefix(self, prompt: list[int]) -> int:
-        """Whole blocks already seen, like vLLM's prefix cache."""
-        cached = 0
+    @staticmethod
+    def _block_hashes(prompt: list[int]) -> list[int]:
+        """One chained hash per whole block, like vLLM. Linear time, so that the fake's
+        own CPU use doesn't show up as extra TTFT on long prompts."""
+        hashes, current = [], 0
         for end in range(BLOCK_SIZE, len(prompt) + 1, BLOCK_SIZE):
-            if tuple(prompt[:end]) not in self._cached:
-                break
-            cached = end
-        return cached
+            current = hash((current, tuple(prompt[end - BLOCK_SIZE : end])))
+            hashes.append(current)
+        return hashes
 
     async def _completions(self, writer, req: dict) -> None:
         self.requests.append(req)
@@ -97,9 +103,14 @@ class FakeVllm:
 
         prompt = req["prompt"]
         max_tokens = req["max_tokens"]
-        cached = self._cached_prefix(prompt)
-        for end in range(BLOCK_SIZE, len(prompt) + 1, BLOCK_SIZE):
-            self._cached.add(tuple(prompt[:end]))
+        hashes = self._block_hashes(prompt)
+        hits = 0
+        for block_hash in hashes:
+            if block_hash not in self._cached:
+                break
+            hits += 1
+        cached = hits * BLOCK_SIZE
+        self._cached.update(hashes)
 
         writer.write(
             b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"

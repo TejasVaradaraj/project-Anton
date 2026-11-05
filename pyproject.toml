@@ -1,7 +1,7 @@
 [project]
 name = "project-anton"
 version = "0.1.0"
-description = "Add your description here"
+description = "Agent-aware KV cache offloading and prefetching benchmark"
 readme = "README.md"
 authors = [
     { name = "Tejasvi Varadaraj", email = "tejasvipradhyumna@gmail.com" }
@@ -16,6 +16,9 @@ dependencies = [
     "pyyaml>=6.0.3",
 ]
 
+[project.scripts]
+anton = "project_anton.cli:main"
+
 [build-system]
 requires = ["uv_build>=0.12.3,<0.13.0"]
 build-backend = "uv_build"
@@ -28,7 +31,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["tests"]
+pythonpath = ["src", "tests"]
 
 [tool.ruff]
 line-length = 100

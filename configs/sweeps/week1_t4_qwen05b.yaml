@@ -1,0 +1,7 @@
+# Pipeline check on the small model. Not a result to report.
+name: ttft
+prompt_lengths: [500, 1000, 2000, 3500]
+reps: 3
+max_tokens: 32
+warmup_requests: 2
+seed: 0

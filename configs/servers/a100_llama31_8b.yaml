@@ -1,0 +1,11 @@
+# Headline model. Served on the Colab A100 80GB with these settings (see SETUP.md).
+name: a100_llama31_8b
+model: meta-llama/Llama-3.1-8B-Instruct
+port: 8000
+vllm_args:
+  dtype: bfloat16
+  max-model-len: 32768
+  enable-prefix-caching: true
+  enable-prompt-tokens-details: true
+token_id_range: [0, 128000] # IDs from 128000 up are special tokens
+kv_shape: { layers: 32, kv_heads: 8, head_dim: 128, dtype_bytes: 2 }
