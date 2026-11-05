@@ -39,8 +39,11 @@ def parse_fio(output: str) -> dict[str, float]:
     return {
         "gbytes_per_s": side["bw_bytes"] / 1e9,
         "iops": side["iops"],
-        "latency_p50_us": percentiles.get("50.000000", 0) / 1000,
-        "latency_p99_us": percentiles.get("99.000000", 0) / 1000,
+        # Total time per I/O. Completion latency alone can hide work done during submission: a real
+        # NVMe/TCP run reported 0.5 us completion latency at 113k IOPS, about 8.8 us per I/O.
+        "latency_mean_us": side.get("lat_ns", {}).get("mean", 0) / 1000,
+        "completion_p50_us": percentiles.get("50.000000", 0) / 1000,
+        "completion_p99_us": percentiles.get("99.000000", 0) / 1000,
     }
 
 

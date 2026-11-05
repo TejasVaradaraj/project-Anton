@@ -156,6 +156,7 @@ def test_parse_fio_reads_the_side_that_ran():
     side = {
         "bw_bytes": 2_000_000_000,
         "iops": 2000.0,
+        "lat_ns": {"mean": 450_000},
         "clat_ns": {"percentile": {"50.000000": 400_000, "99.000000": 900_000}},
     }
     empty = {"bw_bytes": 0, "iops": 0.0}
@@ -163,8 +164,9 @@ def test_parse_fio_reads_the_side_that_ran():
     write = parse_fio(json.dumps({"jobs": [{"read": empty, "write": side}]}))
     assert read == write
     assert read["gbytes_per_s"] == 2.0
-    assert read["latency_p50_us"] == 400
-    assert read["latency_p99_us"] == 900
+    assert read["latency_mean_us"] == 450
+    assert read["completion_p50_us"] == 400
+    assert read["completion_p99_us"] == 900
 
 
 # --- Correctness ---
