@@ -1,0 +1,41 @@
+{
+  "run_id": "20261105T074136Z_a100_llama31_8b",
+  "server": {
+    "kv_shape": {
+      "dtype_bytes": 2,
+      "head_dim": 128,
+      "kv_heads": 8,
+      "layers": 32
+    },
+    "model": "meta-llama/Llama-3.1-8B-Instruct",
+    "name": "a100_llama31_8b",
+    "port": 8000,
+    "token_id_range": [
+      0,
+      128000
+    ],
+    "vllm_args": {
+      "dtype": "bfloat16",
+      "enable-prefix-caching": true,
+      "enable-prompt-tokens-details": true,
+      "max-model-len": 32768
+    }
+  },
+  "sweep": {
+    "max_consecutive_failures": 5,
+    "max_tokens": 32,
+    "name": "ttft",
+    "prompt_lengths": [
+      1000,
+      2000,
+      4000,
+      8000,
+      16000,
+      32000
+    ],
+    "reps": 5,
+    "request_timeout_s": 600,
+    "seed": 0,
+    "warmup_requests": 2
+  }
+}

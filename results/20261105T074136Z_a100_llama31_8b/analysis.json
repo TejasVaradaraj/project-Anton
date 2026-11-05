@@ -1,0 +1,70 @@
+{
+  "by_prompt_length": [
+    {
+      "avg_prefill_tokens_per_s": 12866.122234131104,
+      "break_even_storage_gbytes_per_s": 2.3527585920375444,
+      "cold_to_warm_ratio": 3.53070789553336,
+      "cold_ttft_s": 0.077723496,
+      "kv_gbytes": 0.131072,
+      "prompt_tokens": 1000,
+      "warm_ttft_s": 0.022013573
+    },
+    {
+      "avg_prefill_tokens_per_s": 14201.589849521588,
+      "break_even_storage_gbytes_per_s": 2.268273766688439,
+      "cold_to_warm_ratio": 5.575305135945202,
+      "cold_ttft_s": 0.140829303,
+      "kv_gbytes": 0.262144,
+      "prompt_tokens": 2000,
+      "warm_ttft_s": 0.025259479
+    },
+    {
+      "avg_prefill_tokens_per_s": 13996.177804797553,
+      "break_even_storage_gbytes_per_s": 2.0534550353867393,
+      "cold_to_warm_ratio": 9.378733147155987,
+      "cold_ttft_s": 0.285792311,
+      "kv_gbytes": 0.524288,
+      "prompt_tokens": 4000,
+      "warm_ttft_s": 0.030472379
+    },
+    {
+      "avg_prefill_tokens_per_s": 13170.20660555828,
+      "break_even_storage_gbytes_per_s": 1.852769829016175,
+      "cold_to_warm_ratio": 14.643564684868405,
+      "cold_ttft_s": 0.607431625,
+      "kv_gbytes": 1.048576,
+      "prompt_tokens": 8000,
+      "warm_ttft_s": 0.041481131
+    },
+    {
+      "avg_prefill_tokens_per_s": 11637.411561999972,
+      "break_even_storage_gbytes_per_s": 1.5962945948387748,
+      "cold_to_warm_ratio": 22.497031907918473,
+      "cold_ttft_s": 1.374876184,
+      "kv_gbytes": 2.097152,
+      "prompt_tokens": 16000,
+      "warm_ttft_s": 0.06111367
+    },
+    {
+      "avg_prefill_tokens_per_s": 9208.619777463487,
+      "break_even_storage_gbytes_per_s": 1.244857893777845,
+      "cold_to_warm_ratio": 32.87562293775537,
+      "cold_ttft_s": 3.475005025,
+      "kv_gbytes": 4.194304,
+      "prompt_tokens": 32000,
+      "warm_ttft_s": 0.105701572
+    }
+  ],
+  "invalid_reasons": {},
+  "model": "meta-llama/Llama-3.1-8B-Instruct",
+  "prefill_fit": {
+    "n_points": 30,
+    "overhead_s": -0.15697722128855726,
+    "prefill_tokens_per_s": 9117.535700176457,
+    "r_squared": 0.9880863459396406,
+    "warning": "negative overhead: TTFT isn't linear in length, so use by_prompt_length"
+  },
+  "requests_total": 62,
+  "requests_valid": 62,
+  "run_id": "20261105T074136Z_a100_llama31_8b"
+}

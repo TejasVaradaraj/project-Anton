@@ -19,8 +19,8 @@ own `env.json`, which is the authoritative record for that run.
 | Piece | Status |
 |---|---|
 | Kaggle T4 + Qwen2.5-0.5B via vLLM | Works |
-| Kaggle T4 + Llama-3.2-3B | Not run yet (needed for Week 1) |
-| Colab A100 + Llama-3.1-8B bf16, 32,768 context | Works |
+| Kaggle T4 + Llama-3.2-3B | Not run. Dropped from Week 1: Kaggle stays a Qwen test bed, and the A100 does the Llama runs |
+| Colab A100 + Llama-3.1-8B bf16, 32,768 context | Works, Week 1 sweep measured (see README) |
 | LMCache on any platform | Not run yet (Week 3) |
 | Hugging Face gated model access | Approved and tested |
 | Datadog | Account and API key configured |
@@ -49,10 +49,10 @@ The lasting fix is to keep the virtualenv out of iCloud by adding this to `~/.zs
 ## Colab (A100 80GB)
 | Item | Value |
 |---|---|
-| Python | |
-| CUDA / driver | |
-| vLLM | |
-| Compute units/hr | |
+| Python | 3.13.16 (Colab), 3.12.3 (harness virtualenv) |
+| CUDA / driver | 13.0 / 580.82.07 |
+| vLLM | 0.33.0 |
+| Compute units/hr | About 8.88 (A100 + High-RAM, shown by Colab on 2026-11-05) |
 | Model | meta-llama/Llama-3.1-8B-Instruct, bf16 |
 | Max context | 32,768 tokens |
 | GPU KV cache size | 56.3 GiB, 461,216 tokens |
@@ -61,6 +61,11 @@ The lasting fix is to keep the virtualenv out of iCloud by adding this to `~/.zs
 Cross-check (arithmetic only): 461,216 tokens x 128 KiB/token = 56.30 GiB, and
 461,216 / 32,768 = 14.08. Both match the formula in `analysis/kv_math.py`, and
 `tests/test_kv_math.py` pins them.
+
+**Colab can silently hand you a different GPU.** On 2026-11-05 a new runtime asked for an A100 and
+got an L4, with only a small popup saying so. An existing A100 session was still available in
+another notebook. Check `nvidia-smi` or `env.json` before trusting a run, and delete any fallback
+runtime, since it uses units too.
 
 The earlier plan assumed a 40 GB A100. This one has 80 GB, so 8B fits far more KV cache than
 planned. Week 3's "cliff" (where agents start evicting each other) will need more concurrent
@@ -100,16 +105,18 @@ to AWS if the module test above works. Any Soft-RoCE result stays labeled as emu
 | DD_SITE | |
 | Test metric returned 202? | |
 
-## Test results (no GPU; 2026-11-05)
+## Software test results (2026-11-05)
 | Check | Result |
 |---|---|
-| `pytest`, Python 3.14 (macOS) | 94 passed |
-| `pytest`, Python 3.12 (macOS) | 94 passed |
+| `pytest`, Python 3.14 (macOS) | 100 passed |
+| `pytest`, Python 3.12 (macOS) | 100 passed |
 | `ruff check` | Passed |
 | Fresh clone, notebook's install steps, Python 3.12 | `anton --help` and imports work |
 | Fake server set to 33,333 tokens/s | Pipeline measured 33,099 tokens/s (0.7% off) |
-| Notebook on Kaggle or Colab | **Not run yet** |
-| GitHub Actions CI | **Not run yet** (branch not pushed) |
+| Notebook code on Colab A100 | Server, sweep, analysis, cross-check and stop cells all ran (found 2 bugs, both fixed) |
+| Notebook's Google Drive and archive cells | **Not run** (results were saved locally and downloaded) |
+| Notebook on Kaggle | **Not run** |
+| GitHub Actions CI | Runs on the pull request |
 
 These check the software only. The fake server's numbers are not performance measurements.
 

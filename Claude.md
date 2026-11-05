@@ -97,9 +97,11 @@ Week 0 setup is mostly done; SETUP.md has the verified state and the limitations
 - Record the blanks in SETUP.md (versions, Colab units/hr, AWS kernel). LMCache on T4 comes in Week 3.
 - AWS: test an Ubuntu image with `linux-modules-extra-$(uname -r)` for nvmet/nvmet-tcp/rdma_rxe. Paid: ask first.
 
-**Week 1 is in progress.** The client, runner, analysis and notebook are written and tested against a fake
-server only. **No real GPU numbers exist yet.** NEXT: run `notebooks/week1_ttft.ipynb` on Kaggle T4, then
-compare against `vllm bench serve`, then repeat on A100 (~1 hr, uses Colab units: ask first).
+**Week 1 is measured on the A100** (run `20261105T074136Z_a100_llama31_8b`, results in the README). 62/62 requests
+valid, and `vllm bench serve` agrees. Scope change: Kaggle stays a Qwen test bed, so the plan's T4 + 3B run was dropped.
+Prefill cost per token RISES with length, so don't quote a single prefill rate: use `by_prompt_length` in analysis.json.
+The cause isn't known yet. NEXT: Week 2 (trace generators and replayer). To get an A100, reuse the Drive notebook
+Project-Anton.ipynb; a new notebook got an L4 instead. Chrome saves downloads to the Desktop on this Mac.
 
 Commands: `uv run pytest`, `uv run ruff check .`, `uv run anton --help`.
 

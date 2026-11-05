@@ -1,0 +1,7 @@
+{
+  "prompt_tokens": 2000,
+  "anton_cold_ttft_p50_ms": 140.829,
+  "vllm_bench_ttft_p50_ms": 148.12058300003628,
+  "anton_tpot_p50_ms": 10.865,
+  "vllm_bench_tpot_p50_ms": 10.934910048384213
+}
