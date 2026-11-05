@@ -2,6 +2,9 @@
 
 import asyncio
 import json
+import os
+import subprocess
+import sys
 import threading
 from pathlib import Path
 
@@ -128,3 +131,13 @@ def test_replay_run_and_analyze(tmp_path, monkeypatch, fake_server, capsys):
     capsys.readouterr()
     assert main(["replay", "analyze", str(run_dir)]) == 0
     assert json.loads(capsys.readouterr().out)["requests_valid"] == 2
+
+
+def test_progress_is_not_held_back_when_piped():
+    # A real sweep showed nothing for 30 minutes, because piped output is buffered.
+    code = "import sys, time; from project_anton.cli import main; main(['--help'])"
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).parent.parent / "src")}
+    source = Path(__file__).parent.parent / "src" / "project_anton" / "cli.py"
+    assert "line_buffering=True" in source.read_text()
+    result = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True)
+    assert "usage: anton" in result.stdout
