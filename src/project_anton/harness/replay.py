@@ -69,10 +69,18 @@ def finished_sessions(records: list[dict[str, Any]]) -> set[str]:
 
 
 async def run_replay(
-    cfg: ServerConfig, trace: TraceConfig, run_id: str, run_dir: Path, log=print
+    cfg: ServerConfig,
+    trace: TraceConfig,
+    run_id: str,
+    run_dir: Path,
+    log=print,
+    proxy_url: str | None = None,
 ) -> Path:
-    """Replay the trace. Rerunning with the same run_id runs only unfinished sessions."""
-    config = {"run_id": run_id, "server": asdict(cfg), "trace": asdict(trace)}
+    """Replay the trace. Rerunning with the same run_id runs only unfinished sessions.
+
+    With proxy_url, requests go through the prefetch proxy, which is told about each tool pause.
+    """
+    config = {"run_id": run_id, "server": asdict(cfg), "trace": asdict(trace), "proxy": proxy_url}
     config_path = run_dir / "config.json"
     if config_path.exists():
         check_same_config(config_path, config)
@@ -103,7 +111,7 @@ async def run_replay(
     abort = asyncio.Event()
 
     async with httpx.AsyncClient(
-        base_url=cfg.base_url, timeout=REQUEST_TIMEOUT_S, limits=limits
+        base_url=proxy_url or cfg.base_url, timeout=REQUEST_TIMEOUT_S, limits=limits
     ) as client:
         await preflight(client, cfg, needed)
         loop = asyncio.get_running_loop()
@@ -114,8 +122,12 @@ async def run_replay(
             await asyncio.sleep(session.arrival_s - first_arrival)
             attempt = max(attempts.get(session.session_id, {-1})) + 1
             prompts = session_prompts(session, cfg.token_id_range, key, attempt)
+            agent_id = f"{session.session_id}/{attempt}"
             previous_prompt_tokens = None
             for index, (turn, prompt) in enumerate(zip(session.turns, prompts, strict=True)):
+                if proxy_url and turn.tool:
+                    payload = {"agent_id": agent_id, "tool": turn.tool}
+                    await client.post("/tool_start", json=payload)
                 await asyncio.sleep(turn.pause_before_s)
                 if abort.is_set():
                     return
@@ -123,7 +135,8 @@ async def run_replay(
                 state["in_flight"] += 1
                 concurrent = state["in_flight"]
                 request = CompletionRequest(cfg.model, prompt, turn.response_tokens, trace.seed)
-                result = await stream_completion(client, request)
+                headers = {"X-Agent-Id": agent_id} if proxy_url else None
+                result = await stream_completion(client, request, extra_headers=headers)
                 state["in_flight"] -= 1
                 record = {
                     "run_id": run_id,

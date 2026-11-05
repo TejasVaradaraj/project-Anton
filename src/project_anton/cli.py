@@ -119,7 +119,7 @@ def replay_run(args) -> int:
 
     async def go():
         async with SystemMonitor(run_dir / "raw" / "sysmon", cfg.base_url):
-            await run_replay(cfg, trace, run_id, run_dir)
+            await run_replay(cfg, trace, run_id, run_dir, proxy_url=args.proxy)
 
     try:
         asyncio.run(go())
@@ -151,6 +151,16 @@ def replay_sweep(args) -> int:
 def replay_compare(args) -> int:
     table = compare_sweeps(Path(args.results_dir), args.sweep, Path(args.out))
     print(table.to_string(index=False))
+    return 0
+
+
+def proxy_serve(args) -> int:
+    import uvicorn
+
+    from project_anton.proxy.app import create_app
+
+    app = create_app(args.upstream, lead_s=args.lead, prefetch=not args.no_prefetch)
+    uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
     return 0
 
 
@@ -233,6 +243,7 @@ def build_parser() -> argparse.ArgumentParser:
     run = replay.add_parser("run")
     run.add_argument("--server", required=True)
     run.add_argument("--trace", required=True)
+    run.add_argument("--proxy", help="send requests through the prefetch proxy at this URL")
     run.add_argument("--run-id", help="reuse an ID to resume a stopped run")
     run.add_argument("--results-dir", default="results")
     run.set_defaults(func=replay_run)
@@ -252,6 +263,16 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument("--results-dir", default="results")
     compare.add_argument("--out", required=True)
     compare.set_defaults(func=replay_compare)
+
+    proxy = groups.add_parser("proxy", help="agent-aware prefetch proxy").add_subparsers(
+        required=True
+    )
+    serve = proxy.add_parser("serve")
+    serve.add_argument("--upstream", default="http://127.0.0.1:8000")
+    serve.add_argument("--port", type=int, default=8100)
+    serve.add_argument("--lead", type=float, default=0.5, help="seconds before predicted tool end")
+    serve.add_argument("--no-prefetch", action="store_true", help="relay only, for comparison")
+    serve.set_defaults(func=proxy_serve)
 
     tiers = groups.add_parser("tiers", help="storage tier timing").add_subparsers(required=True)
     run = tiers.add_parser("run")

@@ -93,6 +93,7 @@ async def stream_completion(
     client: httpx.AsyncClient,
     request: CompletionRequest,
     clock: Clock = time.perf_counter_ns,
+    extra_headers: dict[str, str] | None = None,
 ) -> StreamResult:
     """Send one streaming request. Failures come back in the result, never as exceptions,
     so one bad request can't end a long sweep."""
@@ -103,6 +104,7 @@ async def stream_completion(
         "Content-Type": "application/json",
         # Compression can hold chunks back in a buffer, which would distort timing.
         "Accept-Encoding": "identity",
+        **(extra_headers or {}),
     }
 
     wall_time = time.time()
