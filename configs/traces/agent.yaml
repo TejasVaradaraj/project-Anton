@@ -1,0 +1,7 @@
+# Tool-calling agents. Token counts and pause times are plan assumptions, not yet calibrated.
+name: agent
+kind: agent
+sessions: 8
+arrival_rate_per_s: 0.2
+seed: 0
+max_context_tokens: 32000

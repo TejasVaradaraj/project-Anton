@@ -1,0 +1,7 @@
+# Chat sessions with a person pausing between turns.
+name: multi_turn
+kind: multi_turn
+sessions: 16
+arrival_rate_per_s: 0.5
+seed: 0
+max_context_tokens: 32000
