@@ -9,6 +9,7 @@ from pathlib import Path
 
 from project_anton.analysis.cliff import compare_sweeps
 from project_anton.analysis.replay import analyze_replay
+from project_anton.analysis.scenarios import compare_scenarios
 from project_anton.analysis.tiers import compare_tiers
 from project_anton.analysis.ttft import analyze_run
 from project_anton.correctness.compare import compare_files, record
@@ -154,6 +155,13 @@ def replay_compare(args) -> int:
     return 0
 
 
+def replay_scenarios(args) -> int:
+    runs = dict(item.split("=", 1) for item in args.run)
+    table = compare_scenarios({k: Path(v) for k, v in runs.items()}, Path(args.out))
+    print(table.to_string(index=False))
+    return 0
+
+
 def proxy_serve(args) -> int:
     import uvicorn
 
@@ -263,6 +271,11 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument("--results-dir", default="results")
     compare.add_argument("--out", required=True)
     compare.set_defaults(func=replay_compare)
+
+    scenarios = replay.add_parser("scenarios", help="compare setups on one workload")
+    scenarios.add_argument("--run", action="append", required=True, help="name=run folder")
+    scenarios.add_argument("--out", required=True)
+    scenarios.set_defaults(func=replay_scenarios)
 
     proxy = groups.add_parser("proxy", help="agent-aware prefetch proxy").add_subparsers(
         required=True

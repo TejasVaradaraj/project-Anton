@@ -1,0 +1,50 @@
+# Calibrated agents under pressure on the 8 GiB GPU cache, so eviction happens during tool pauses.
+# Tool-calling agents, calibrated from 20,008 real SWE-agent runs (see calibration/swe_agent.json).
+# Token counts, steps and tool mix are measured, using an approximate tokenizer.
+# NOT measured: median_s and sigma (tool pauses). The dataset has no timing, so they're assumptions.
+name: agent
+kind: agent
+sessions: 24
+arrival_rate_per_s: 1.0
+seed: 0
+max_context_tokens: 32000
+params:
+  prefix_tokens: 1119
+  first_turn_tokens:
+    probs: [0.0, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999]
+    values: [685, 698, 712, 727, 776, 877, 1097, 1389, 1743, 2787, 3530]
+  steps:
+    probs: [0.0, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999]
+    values: [1, 4, 6, 7, 10, 17, 33, 50, 70, 156, 285]
+  response_tokens:
+    probs: [0.0, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999]
+    values: [14, 27, 37, 42, 53, 78, 124, 192, 254, 481, 1040]
+  tools:
+    edit:
+      weight: 0.373
+      median_s: 0.5
+      sigma: 0.5
+      output_tokens:
+        probs: [0.0, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999]
+        values: [20, 31, 35, 38, 127, 410, 780, 1253, 1375, 1660, 2981]
+    read:
+      weight: 0.19
+      median_s: 0.5
+      sigma: 0.5
+      output_tokens:
+        probs: [0.0, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999]
+        values: [21, 28, 35, 62, 866, 1101, 1254, 1389, 1470, 1715, 3014]
+    run:
+      weight: 0.187
+      median_s: 20.0
+      sigma: 0.8
+      output_tokens:
+        probs: [0.0, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999]
+        values: [19, 24, 29, 33, 46, 85, 182, 375, 634, 1751, 7243]
+    search:
+      weight: 0.249
+      median_s: 1.0
+      sigma: 0.6
+      output_tokens:
+        probs: [0.0, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999]
+        values: [18, 24, 29, 32, 38, 54, 88, 163, 304, 1208, 5447]
