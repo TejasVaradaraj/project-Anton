@@ -1,0 +1,11 @@
+# Does a prompt that's an exact multiple of LMCache's 256-token chunk behave differently? In Week 4,
+# 32,000 tokens (125 chunks) was never restored, while 16,000 (62.5 chunks) was. These pair aligned and
+# unaligned lengths at similar sizes.
+name: alignment
+prompt_lengths: [15872, 16000, 16128, 31744, 31900, 32000]
+reps: 3
+max_tokens: 16
+filler_tokens: 16000
+filler_prompts: 8
+settle_s: 5
+seed: 1

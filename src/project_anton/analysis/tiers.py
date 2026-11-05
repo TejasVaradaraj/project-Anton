@@ -16,6 +16,7 @@ from project_anton.analysis.kv_math import ModelShape, cache_bytes  # noqa: E402
 from project_anton.harness.runlog import read_jsonl  # noqa: E402
 
 PHASES = ("cold", "warm", "evicted")
+MAX_PLAUSIBLE_BYTES_PER_S = 32e9  # PCIe 4.0 x16, the A100's link, tops out near this
 
 
 def load_run(run_dir: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
@@ -55,7 +56,11 @@ def summarize_tier(df: pd.DataFrame, shape: ModelShape, tier: str) -> pd.DataFra
                 ),
                 "load_ms": load_s * 1000,
                 "saved_vs_cold_ms": (cold - evicted) * 1000,
-                "served_from_tier": bool(hits.median() > 0),
+                # vLLM's counter also counts tokens already on the GPU, so check the speed too. A rate
+                # above what the GPU's PCIe link can carry means nothing was really loaded.
+                "served_from_tier": bool(hits.median() > 0)
+                and load_s > 0
+                and size / load_s <= MAX_PLAUSIBLE_BYTES_PER_S,
                 "external_hits_p50": float(hits.median()),
                 "effective_gbytes_per_s": size / load_s / 1e9 if load_s > 0 else None,
                 "break_even_gbytes_per_s": size / (cold - warm) / 1e9 if cold > warm else None,

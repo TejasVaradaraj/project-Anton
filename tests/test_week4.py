@@ -5,6 +5,7 @@ import json
 import os
 from dataclasses import replace
 
+import pandas as pd
 import pytest
 from fake_vllm import FakeVllm
 
@@ -89,6 +90,24 @@ def test_offload_is_seen_and_its_load_time_measured(tmp_path):
     assert row["warm_ttft_ms"] < row["evicted_ttft_ms"] < row["cold_ttft_ms"]
     # 128 KiB/token at 5 us/token is about 26 GB/s. Timer overhead makes the measured rate lower.
     assert 5 < row["effective_gbytes_per_s"] <= 30
+
+
+def test_impossibly_fast_restore_is_not_counted_as_served_from_tier():
+    # Seen for real: vLLM counted a 32k prompt as an external hit, but it never left the GPU. It
+    # returned about as fast as a warm request, which would mean moving 4 GB in about 5 ms.
+    rows = []
+    for phase, ttft, hits in (("cold", 5.3, 0), ("warm", 0.084, 0), ("evicted", 0.089, 32000)):
+        rows.append(
+            {
+                "target_prompt_tokens": 32000,
+                "phase": phase,
+                "ttft_s": ttft,
+                "external_hits_delta": hits,
+                "valid": True,
+            }
+        )
+    table = summarize_tier(pd.DataFrame(rows), SHAPE, "cpu")
+    assert not table["served_from_tier"].iloc[0]
 
 
 def test_tier_comparison_writes_table_and_plot(tmp_path):

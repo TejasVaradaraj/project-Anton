@@ -1,0 +1,6 @@
+# The same load with LMCache CPU offload.
+name: week7_lmcache
+trace: configs/traces/agent.yaml
+grid:
+  arrival_rate_per_s: [1.0]
+  sessions: [64, 80, 96]
