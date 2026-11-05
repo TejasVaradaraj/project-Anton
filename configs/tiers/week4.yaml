@@ -1,0 +1,9 @@
+# Cold, warm, then evicted and re-requested. Filler is about twice the small GPU cache.
+name: week4
+prompt_lengths: [1000, 4000, 16000, 32000]
+reps: 5
+max_tokens: 16
+filler_tokens: 16000
+filler_prompts: 8
+settle_s: 5
+seed: 0

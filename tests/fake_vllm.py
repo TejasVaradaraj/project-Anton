@@ -23,8 +23,13 @@ class FakeVllm:
     first_chunk_tokens: int = 1
     trailing_finish_chunk_delay_s: float | None = None
     prompt_tokens_details: bool = True
+    external_hits: float = 0.0
+    capacity_blocks: int | None = None  # When set, oldest blocks are evicted beyond this
+    offload_load_s_per_token: float | None = None  # When set, evicted blocks load at this cost
     requests: list[dict] = field(default_factory=list)
     _cached: set = field(default_factory=set)
+    _offloaded: set = field(default_factory=set)
+    _order: list = field(default_factory=list)
     _writers: set = field(default_factory=set)
     _server: asyncio.Server | None = None
 
@@ -65,6 +70,8 @@ class FakeVllm:
                         "# HELP vllm:kv_cache_usage_perc usage\n"
                         f'vllm:kv_cache_usage_perc{{model_name="{self.model}"}} 0.25\n'
                         f"vllm:num_requests_running {len(self.requests)}.0\n"
+                        "vllm:external_prefix_cache_hits_total "
+                        f"{self.external_hits}\n"
                         "python_gc_objects_collected_total 7.0\n"
                     ).encode()
                     writer.write(
@@ -120,14 +127,25 @@ class FakeVllm:
                 break
             hits += 1
         cached = hits * BLOCK_SIZE
+        load_s = 0.0
+        if self.offload_load_s_per_token is not None and hits == 0 and hashes[0] in self._offloaded:
+            restored = sum(1 for h in hashes if h in self._offloaded)
+            cached = restored * BLOCK_SIZE
+            load_s = cached * self.offload_load_s_per_token
+            self.external_hits += cached
+        self._offloaded.update(hashes)
         self._cached.update(hashes)
+        self._order.extend(hashes)
+        if self.capacity_blocks is not None:
+            while len(self._cached) > self.capacity_blocks and self._order:
+                self._cached.discard(self._order.pop(0))
 
         writer.write(
             b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
             b"Transfer-Encoding: chunked\r\n\r\n"
         )
         await writer.drain()
-        await asyncio.sleep((len(prompt) - cached) * self.prefill_s_per_token)
+        await asyncio.sleep((len(prompt) - cached) * self.prefill_s_per_token + load_s)
 
         if self.fail_mode == "stream_error":
             await self._send_chunk(writer, {"object": "error", "message": "engine died"})
