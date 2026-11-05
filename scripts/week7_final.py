@@ -6,9 +6,16 @@ Run from the repo root on a GPU machine:
 """
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
+
+
+# LMCache restores changed model output in Week 4 (see README). Results from these runs would not
+# mean anything until that's resolved, so they must be asked for explicitly.
+if os.environ.get("ANTON_ALLOW_UNVERIFIED_OFFLOAD") != "1":
+    sys.exit("Refusing to run: LMCache restores failed the correctness check.")
 
 
 def anton(*args: object) -> None:

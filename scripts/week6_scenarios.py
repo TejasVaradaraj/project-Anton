@@ -6,6 +6,7 @@ Needs a GPU machine with vLLM and LMCache installed. Run from the repo root:
 """
 
 import argparse
+import os
 import json
 import subprocess
 import sys
@@ -21,6 +22,12 @@ SCENARIOS = (
     ("C offload + prefetch", "a100_small_cpu", True),
     ("D ideal large GPU cache", "a100_llama31_8b", False),
 )
+
+
+# LMCache restores changed model output in Week 4 (see README). Results from these runs would not
+# mean anything until that's resolved, so they must be asked for explicitly.
+if os.environ.get("ANTON_ALLOW_UNVERIFIED_OFFLOAD") != "1":
+    sys.exit("Refusing to run: LMCache restores failed the correctness check.")
 
 
 def anton(*args: object) -> None:
