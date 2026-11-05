@@ -1,12 +1,13 @@
 """Turn a run's raw requests into a summary table, a prefill estimate and a plot."""
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
-import matplotlib
-
-matplotlib.use("Agg")
+# Set before importing matplotlib, which reads this on import. Colab sets it to a
+# notebook-only backend that this virtualenv doesn't have, and the import then crashes.
+os.environ["MPLBACKEND"] = "Agg"
 
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402

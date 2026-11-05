@@ -1,6 +1,7 @@
 import json
 import os
 import socket
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -156,6 +157,16 @@ def test_environment_capture_excludes_secrets(monkeypatch):
     text = json.dumps(capture_environment())
     assert "SECRETVALUE" not in text
     assert json.loads(text)["env"]["CUDA_VISIBLE_DEVICES"] == "0"
+
+
+def test_cli_imports_with_colab_matplotlib_backend():
+    # Colab sets this, and a real run crashed on import because of it.
+    env = {
+        **os.environ,
+        "MPLBACKEND": "module://matplotlib_inline.backend_inline",
+        "PYTHONPATH": str(Path(__file__).parent.parent / "src"),
+    }
+    subprocess.run([sys.executable, "-c", "import project_anton.cli"], env=env, check=True)
 
 
 def test_jsonl_survives_half_written_last_line(tmp_path):
