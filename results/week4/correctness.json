@@ -1,0 +1,118 @@
+{
+  "cpu": {
+    "by_phase": {
+      "cached": {
+        "max_logprob_diff": 1.249008059501648,
+        "n": 12,
+        "token_mismatches": 1
+      },
+      "evicted": {
+        "max_logprob_diff": 5.836757183074951,
+        "n": 12,
+        "token_mismatches": 11
+      },
+      "fresh": {
+        "max_logprob_diff": 2.563373565673828,
+        "n": 12,
+        "token_mismatches": 2
+      }
+    },
+    "compared": 36,
+    "max_logprob_diff": 5.836757183074951,
+    "token_mismatches": 14
+  },
+  "disk": {
+    "by_phase": {
+      "cached": {
+        "max_logprob_diff": 1.249008059501648,
+        "n": 12,
+        "token_mismatches": 1
+      },
+      "evicted": {
+        "max_logprob_diff": 6.369494080543518,
+        "n": 12,
+        "token_mismatches": 10
+      },
+      "fresh": {
+        "max_logprob_diff": 2.563373565673828,
+        "n": 12,
+        "token_mismatches": 2
+      }
+    },
+    "compared": 36,
+    "max_logprob_diff": 6.369494080543518,
+    "token_mismatches": 13
+  },
+  "noise": {
+    "by_phase": {
+      "cached": {
+        "max_logprob_diff": 0.0,
+        "n": 12,
+        "token_mismatches": 0
+      },
+      "evicted": {
+        "max_logprob_diff": 0.0,
+        "n": 12,
+        "token_mismatches": 0
+      },
+      "fresh": {
+        "max_logprob_diff": 0.0,
+        "n": 12,
+        "token_mismatches": 0
+      }
+    },
+    "compared": 36,
+    "max_logprob_diff": 0.0,
+    "token_mismatches": 0
+  },
+  "self_check": {
+    "baseline": {
+      "cached": {
+        "first_token_mismatches": 1,
+        "n": 12,
+        "token_mismatches": 3
+      },
+      "evicted": {
+        "first_token_mismatches": 0,
+        "n": 12,
+        "token_mismatches": 0
+      }
+    },
+    "cpu": {
+      "cached": {
+        "first_token_mismatches": 0,
+        "n": 12,
+        "token_mismatches": 2
+      },
+      "evicted": {
+        "first_token_mismatches": 10,
+        "n": 12,
+        "token_mismatches": 11
+      }
+    },
+    "disk": {
+      "cached": {
+        "first_token_mismatches": 0,
+        "n": 12,
+        "token_mismatches": 2
+      },
+      "evicted": {
+        "first_token_mismatches": 9,
+        "n": 12,
+        "token_mismatches": 10
+      }
+    },
+    "noise": {
+      "cached": {
+        "first_token_mismatches": 1,
+        "n": 12,
+        "token_mismatches": 3
+      },
+      "evicted": {
+        "first_token_mismatches": 0,
+        "n": 12,
+        "token_mismatches": 0
+      }
+    }
+  }
+}

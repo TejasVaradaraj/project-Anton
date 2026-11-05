@@ -9,9 +9,9 @@ prefetching it back works, and how fast the storage must be for that to pay off.
 
 ## Status
 
-**Weeks 1-3 have real measurements on an A100.** Results so far don't show offload winning on its own:
-LMCache removes cache misses, but in the Week 3 sweep it lowers goodput. Later experiments are testing
-whether that changes when cache capacity, rather than GPU compute, is the limit.
+**Weeks 1-5 have real measurements, and the main finding so far is a problem.** With vLLM 0.33.0 and LMCache
+0.5.6 on this setup, restored KV caches change the model's output, with no error reported. They were also
+slower than recomputing. So prefetching (Week 6) hasn't been run: it would only speed up wrong answers.
 
 ## Week 1 result: what the prefix cache saves
 
@@ -90,7 +90,8 @@ Calibrated agents arriving at 1 per second, on the full 56 GiB GPU KV cache, wit
 **What was measured**
 - **There's a cliff between 64 and 96 sessions.** Goodput falls 73%, and a turn that misses the cache
   waits about 33 s, far beyond the 3.5 s a 32k recompute takes alone, so misses queue behind each other.
-- **LMCache really does restore caches.** Turns finding their cache go from 67% to 99.4%.
+- **LMCache finds nearly every cache.** Turns finding their cache go from 67% to 99.4%. But Week 4 shows
+  those restores aren't correct, so these LMCache rows can't count as a working system.
 - **But LMCache costs goodput here.** It's lower at every load above 16 sessions, and half at 96
   sessions. Even with no eviction, its TTFT is about 40-60% higher.
 - **The compute limit arrives too.** TPOT passes the 100 ms target at 96 sessions in both setups.
@@ -103,6 +104,49 @@ Calibrated agents arriving at 1 per second, on the full 56 GiB GPU KV cache, wit
 - A client bug ended some sessions early when the model generated certain Unicode characters. It's
   fixed now. Most points lost 0-2 requests, but LMCache at 64 sessions lost 11 sessions' remaining
   requests, sending 13% less load, so that row isn't a fair comparison.
+
+## Week 4 result: restores are slow, and their output is wrong
+
+On an 8 GiB GPU cache, each prompt is sent cold, then warm, then evicted with filler prompts and sent
+again. LMCache 0.5.6 with vLLM 0.33.0, 5 repeats per length, 60/60 requests valid per tier.
+
+**Restored caches changed the model's output.** Greedy decoding on one server should repeat exactly:
+
+| Comparison (12 prompts each) | Outputs changed | First-token logprob change, median (max) |
+|---|---:|---:|
+| Two separate GPU-only servers, all 36 requests | 0 of 36 | 0 |
+| GPU only: evicted and recomputed vs fresh | 0 | 0 |
+| GPU only: ordinary prefix cache vs fresh | 3 | 0.021 (0.037) |
+| LMCache CPU: restored vs fresh | **11** | **0.986 (3.385)** |
+| LMCache disk: restored vs fresh | **10** | **0.395 (3.374)** |
+
+So the server is deterministic, and ordinary prefix caching causes small rounding-level changes on these
+prompts. Restores change the first token's logprob by roughly 20-50 times that at the median, and
+produce entirely different text. Nothing reports an error, and vLLM counts them as cache hits. **Until
+this is resolved, the LMCache timings in Weeks 3 and 4 describe restores that aren't correct.** Prefetch
+and final offload runs are held behind a check in their scripts for this reason.
+
+The cause isn't confirmed. An open LMCache pull request,
+[LMCache/LMCache#4887](https://github.com/LMCache/LMCache/pull/4887), describes copy errors between
+newer vLLM KV layouts and this connector, which would fit. Prompts here are random token IDs, so this
+should be repeated with real text.
+
+**Restores were also slower than recomputing.** The time to get the cache back, compared with warm:
+
+| Prompt tokens | Tokens restored | Recompute, GPU only (ms) | CPU restore (ms) | Disk restore (ms) | Cold with CPU saves (ms) | Cold with disk saves (ms) |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1,000 | 768 | 68 | 133 | 171 | 130 | 138 |
+| 4,000 | 3,840 | 280 | 608 | 873 | 509 | 574 |
+| 16,000 | 15,872 | 1,352 | 2,475 | 3,131 | 2,278 | 7,385 |
+
+- Restores delivered about 0.8 GB/s from CPU RAM and about 0.6-0.8 GB/s from disk, against a break-even
+  near 1.6 GB/s at 16k. fio read that disk at 3.9 GB/s, so storage wasn't the limit in these runs.
+- Saving is costly on the request path: at 16k, a cold request takes 1.6x as long with CPU saves, and
+  5.3x as long with disk saves.
+- 32,000 tokens is left out. It was never restored, there were no `Retrieved` log lines, though vLLM's
+  counter reported a hit. Why it stays on the GPU isn't known. 32,000 is an exact multiple of LMCache's
+  256-token chunk, and the other lengths aren't, but that link is untested.
+- Whether the disk reads reached the disk wasn't confirmed against the disk logs.
 
 ## Week 5 check: NVMe-oF on a local VM
 
@@ -118,8 +162,8 @@ LMCache's 32 MiB chunk size. Results are in [`results/week5_mac_vm_lab`](results
 **This shows the protocols run end to end, and roughly what the software path costs. It doesn't
 measure a network.** Two VMs couldn't reach each other on this Mac's virtual network, so the target and
 initiator share one VM and no packet crosses even a virtual NIC. Real networks would add latency and
-limit bandwidth. Soft-RoCE is software emulation, so it says nothing about RDMA hardware, and it's only
-slower than TCP here because it does in software what a real RDMA NIC does in hardware.
+limit bandwidth. Soft-RoCE is software emulation, so its speed says nothing about RDMA hardware. Why it's
+slower than TCP here wasn't tested.
 
 ## Agent trace calibration
 
