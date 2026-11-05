@@ -101,3 +101,30 @@ def test_stop_with_nothing_running(tmp_path, monkeypatch, capsys):
     )
     assert main(["server", "stop", "--config", str(cfg)]) == 0
     assert "nothing was running" in capsys.readouterr().out
+
+
+def test_replay_run_and_analyze(tmp_path, monkeypatch, fake_server, capsys):
+    monkeypatch.chdir(tmp_path)
+    server_cfg, _ = write_configs(tmp_path, fake_server)
+    trace = tmp_path / "trace.yaml"
+    trace.write_text(
+        yaml.safe_dump(
+            {
+                "name": "t",
+                "kind": "long_context",
+                "sessions": 2,
+                "arrival_rate_per_s": 100.0,
+                "max_context_tokens": 2000,
+                "params": {"median_prompt_tokens": 500},
+            }
+        )
+    )
+    args = ["replay", "run", "--server", str(server_cfg), "--trace", str(trace)]
+    assert main([*args, "--run-id", "r"]) == 0
+    run_dir = tmp_path / "results" / "r"
+    assert json.loads((run_dir / "config.json").read_text())["trace"]["kind"] == "long_context"
+    assert (run_dir / "raw" / "sysmon" / "status.json").exists()
+
+    capsys.readouterr()
+    assert main(["replay", "analyze", str(run_dir)]) == 0
+    assert json.loads(capsys.readouterr().out)["requests_valid"] == 2

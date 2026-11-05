@@ -1,0 +1,5 @@
+# More agents means more KV cache in use at once. Week 3 extends this to find the cliff.
+name: week2_agent_load
+trace: configs/traces/agent.yaml
+grid:
+  sessions: [1, 2, 4, 8]

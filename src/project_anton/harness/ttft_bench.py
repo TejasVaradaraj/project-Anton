@@ -87,7 +87,7 @@ def invalid_reasons(record: dict[str, Any]) -> list[str]:
     return reasons
 
 
-async def preflight(client: httpx.AsyncClient, cfg: ServerConfig, sweep: SweepConfig) -> None:
+async def preflight(client: httpx.AsyncClient, cfg: ServerConfig, needed_tokens: int) -> None:
     """Catch setup mistakes before any GPU time is spent on the sweep."""
     try:
         (await client.get("/health")).raise_for_status()
@@ -99,9 +99,8 @@ async def preflight(client: httpx.AsyncClient, cfg: ServerConfig, sweep: SweepCo
     if cfg.model not in models:
         raise PreflightError(f"server has {sorted(models)}, config wants {cfg.model}")
     limit = models[cfg.model].get("max_model_len")
-    needed = max(sweep.prompt_lengths) + sweep.max_tokens
-    if limit is not None and needed > limit:
-        raise PreflightError(f"sweep needs {needed} tokens, server max_model_len is {limit}")
+    if limit is not None and needed_tokens > limit:
+        raise PreflightError(f"run needs {needed_tokens} tokens, server max_model_len is {limit}")
 
 
 def finished_pairs(records: list[dict[str, Any]]) -> set[str]:
@@ -125,7 +124,7 @@ async def run_sweep(
     config = {"run_id": run_id, "server": asdict(cfg), "sweep": asdict(sweep)}
     config_path = run_dir / "config.json"
     if config_path.exists():
-        _check_same_config(config_path, config)
+        check_same_config(config_path, config)
     else:
         write_json(config_path, config)
 
@@ -143,7 +142,7 @@ async def run_sweep(
             attempts[r["pair_id"]] = attempts.get(r["pair_id"], 0) + 1
 
     async with httpx.AsyncClient(base_url=cfg.base_url, timeout=sweep.request_timeout_s) as client:
-        await preflight(client, cfg, sweep)
+        await preflight(client, cfg, max(sweep.prompt_lengths) + sweep.max_tokens)
 
         async def send(phase, pair, attempt, prompt, target_len, rep) -> dict[str, Any]:
             request = CompletionRequest(cfg.model, prompt, sweep.max_tokens, sweep.seed)
@@ -203,7 +202,7 @@ async def run_sweep(
     return requests_path
 
 
-def _check_same_config(path: Path, config: dict[str, Any]) -> None:
+def check_same_config(path: Path, config: dict[str, Any]) -> None:
     """Refuse to mix results from two different setups in one run folder."""
 
     def comparable(obj: dict[str, Any]) -> dict[str, Any]:

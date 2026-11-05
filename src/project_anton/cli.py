@@ -1,4 +1,4 @@
-"""Command line: `anton server start|stop|status` and `anton ttft run|analyze`."""
+"""Command line: `anton server`, `anton ttft` and `anton replay`."""
 
 import argparse
 import asyncio
@@ -7,7 +7,9 @@ import shutil
 import sys
 from pathlib import Path
 
+from project_anton.analysis.replay import analyze_replay
 from project_anton.analysis.ttft import analyze_run
+from project_anton.harness.replay import load_replay_sweep, run_grid, run_replay
 from project_anton.harness.runlog import capture_environment, make_run_id, write_json
 from project_anton.harness.server import (
     load_server_config,
@@ -16,7 +18,9 @@ from project_anton.harness.server import (
     stop_server,
     wait_until_healthy,
 )
+from project_anton.harness.sysmon import SystemMonitor
 from project_anton.harness.ttft_bench import load_sweep_config, run_sweep
+from project_anton.traces.generators import load_trace_config
 
 LOG_DIR = Path("logs")
 
@@ -63,12 +67,7 @@ def server_status(args) -> int:
     return 0
 
 
-def ttft_run(args) -> int:
-    cfg = load_server_config(args.server)
-    sweep = load_sweep_config(args.sweep)
-    run_id = args.run_id or make_run_id(f"{cfg.name}_{sweep.name}")
-    run_dir = Path(args.results_dir) / run_id
-
+def _record_env(cfg, run_dir: Path) -> None:
     env = capture_environment()
     log_path, _ = _paths(cfg.name)
     if log_path.exists():
@@ -79,18 +78,68 @@ def ttft_run(args) -> int:
     if env["git"]["dirty"]:
         print("WARNING: uncommitted changes, so this git SHA won't fully reproduce the run")
 
+
+def _save_server_log(cfg, run_dir: Path) -> None:
+    log_path, _ = _paths(cfg.name)
+    if log_path.exists():
+        (run_dir / "raw").mkdir(parents=True, exist_ok=True)
+        shutil.copy(log_path, run_dir / "raw" / "server.log")
+
+
+def ttft_run(args) -> int:
+    cfg = load_server_config(args.server)
+    sweep = load_sweep_config(args.sweep)
+    run_id = args.run_id or make_run_id(f"{cfg.name}_{sweep.name}")
+    run_dir = Path(args.results_dir) / run_id
+    _record_env(cfg, run_dir)
     try:
         asyncio.run(run_sweep(cfg, sweep, run_id, run_dir))
     finally:
-        if log_path.exists():
-            (run_dir / "raw").mkdir(parents=True, exist_ok=True)
-            shutil.copy(log_path, run_dir / "raw" / "server.log")
+        _save_server_log(cfg, run_dir)
     print(f"results in {run_dir}")
     return 0
 
 
 def ttft_analyze(args) -> int:
     print(json.dumps(analyze_run(Path(args.run_dir)), indent=2))
+    return 0
+
+
+def replay_run(args) -> int:
+    cfg = load_server_config(args.server)
+    trace = load_trace_config(args.trace)
+    run_id = args.run_id or make_run_id(f"{cfg.name}_{trace.name}")
+    run_dir = Path(args.results_dir) / run_id
+    _record_env(cfg, run_dir)
+
+    async def go():
+        async with SystemMonitor(run_dir / "raw" / "sysmon", cfg.base_url):
+            await run_replay(cfg, trace, run_id, run_dir)
+
+    try:
+        asyncio.run(go())
+    finally:
+        _save_server_log(cfg, run_dir)
+    print(f"results in {run_dir}")
+    return 0
+
+
+def replay_analyze(args) -> int:
+    print(json.dumps(analyze_replay(Path(args.run_dir)), indent=2))
+    return 0
+
+
+def replay_sweep(args) -> int:
+    cfg = load_server_config(args.server)
+    sweep = load_replay_sweep(args.sweep)
+    results_dir = Path(args.results_dir)
+    finished = asyncio.run(
+        run_grid(cfg, sweep, results_dir, before_run=lambda d: _record_env(cfg, d))
+    )
+    for run_id in finished:
+        _save_server_log(cfg, results_dir / run_id)
+        analyze_replay(results_dir / run_id)
+    print(f"{len(finished)} points finished in {results_dir}")
     return 0
 
 
@@ -120,6 +169,24 @@ def build_parser() -> argparse.ArgumentParser:
     analyze = ttft.add_parser("analyze")
     analyze.add_argument("run_dir")
     analyze.set_defaults(func=ttft_analyze)
+
+    replay = groups.add_parser("replay", help="replay traces").add_subparsers(required=True)
+    run = replay.add_parser("run")
+    run.add_argument("--server", required=True)
+    run.add_argument("--trace", required=True)
+    run.add_argument("--run-id", help="reuse an ID to resume a stopped run")
+    run.add_argument("--results-dir", default="results")
+    run.set_defaults(func=replay_run)
+
+    analyze = replay.add_parser("analyze")
+    analyze.add_argument("run_dir")
+    analyze.set_defaults(func=replay_analyze)
+
+    grid = replay.add_parser("sweep", help="run a grid; finished points are skipped")
+    grid.add_argument("--server", required=True)
+    grid.add_argument("--sweep", required=True)
+    grid.add_argument("--results-dir", default="results")
+    grid.set_defaults(func=replay_sweep)
     return parser
 
 
