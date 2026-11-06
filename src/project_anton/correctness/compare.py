@@ -11,6 +11,7 @@ from typing import Any
 
 import httpx
 
+from project_anton.correctness.text_prompts import load_prompts
 from project_anton.harness.prompts import make_prompt
 from project_anton.harness.runlog import append_jsonl, read_jsonl
 from project_anton.harness.server import ServerConfig
@@ -44,15 +45,25 @@ async def _complete(client: httpx.AsyncClient, cfg: ServerConfig, prompt: list[i
     }
 
 
-async def record(cfg: ServerConfig, label: str, out_dir: Path, settle_s: float = 5.0) -> Path:
+async def record(
+    cfg: ServerConfig,
+    label: str,
+    out_dir: Path,
+    settle_s: float = 5.0,
+    prompts_file: Path | None = None,
+) -> Path:
     """Send the same prompts on any server: once fresh, again cached, again after eviction."""
     path = out_dir / f"{label}.jsonl"
     # A fixed key, not the run ID: every server must see identical prompts.
-    prompts = {
-        (length, i): make_prompt(length, cfg.token_id_range, f"correctness/{length}/{i}")
-        for length in LENGTHS
-        for i in range(PROMPTS_PER_LENGTH)
-    }
+    prompts = (
+        load_prompts(prompts_file)
+        if prompts_file
+        else {
+            (length, i): make_prompt(length, cfg.token_id_range, f"correctness/{length}/{i}")
+            for length in LENGTHS
+            for i in range(PROMPTS_PER_LENGTH)
+        }
+    )
     async with httpx.AsyncClient(base_url=cfg.base_url, timeout=600) as client:
         for (length, i), prompt in prompts.items():
             for phase in ("fresh", "cached", "evicted"):

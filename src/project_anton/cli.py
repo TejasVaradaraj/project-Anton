@@ -215,7 +215,8 @@ def storage_baseline(args) -> int:
 
 def correctness_record(args) -> int:
     cfg = load_server_config(args.server)
-    print(asyncio.run(record(cfg, args.label, Path(args.out), settle_s=args.settle)))
+    prompts = Path(args.prompts) if args.prompts else None
+    print(asyncio.run(record(cfg, args.label, Path(args.out), args.settle, prompts)))
     return 0
 
 
@@ -328,6 +329,7 @@ def build_parser() -> argparse.ArgumentParser:
     rec.add_argument("--label", required=True)
     rec.add_argument("--out", required=True)
     rec.add_argument("--settle", type=float, default=5.0, help="seconds to let saves finish")
+    rec.add_argument("--prompts", help="prompts file from make_text_prompts.py; default random")
     rec.set_defaults(func=correctness_record)
 
     cmp_ = check.add_parser("compare")
