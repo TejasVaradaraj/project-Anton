@@ -15,7 +15,9 @@ def summarize(name: str, path: Path) -> list[dict]:
     records = {(r["length"], r["i"], r["phase"]): r for r in read_jsonl(path)}
     prompts = [(length, i) for length, i, phase in records if phase == "fresh"]
     rows = []
-    for phase in ("cached", "evicted"):
+    for phase in ("cached", "evicted", "split"):
+        if (prompts[0][0], prompts[0][1], phase) not in records:
+            continue
         changes = []
         changed = 0
         for length, i in prompts:

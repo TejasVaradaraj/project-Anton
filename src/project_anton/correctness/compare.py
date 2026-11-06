@@ -39,9 +39,11 @@ async def _complete(client: httpx.AsyncClient, cfg: ServerConfig, prompt: list[i
     response.raise_for_status()
     choice = response.json()["choices"][0]
     logprobs = choice.get("logprobs") or {}
+    details = (response.json().get("usage") or {}).get("prompt_tokens_details") or {}
     return {
         "tokens": logprobs.get("tokens"),
         "logprobs": logprobs.get("token_logprobs"),
+        "cached_tokens": details.get("cached_tokens"),
     }
 
 
@@ -51,8 +53,14 @@ async def record(
     out_dir: Path,
     settle_s: float = 5.0,
     prompts_file: Path | None = None,
+    split_chunk: int | None = None,
 ) -> Path:
-    """Send the same prompts on any server: once fresh, again cached, again after eviction."""
+    """Send the same prompts on any server: once fresh, again cached, again after eviction.
+
+    With split_chunk, also send each prompt with only its whole chunks cached. A correct restore
+    has this same split of cached and computed tokens, so a server with no offload shows how much
+    the split alone changes the answer.
+    """
     path = out_dir / f"{label}.jsonl"
     # A fixed key, not the run ID: every server must see identical prompts.
     prompts = (
@@ -66,14 +74,16 @@ async def record(
     )
     async with httpx.AsyncClient(base_url=cfg.base_url, timeout=600) as client:
         for (length, i), prompt in prompts.items():
-            for phase in ("fresh", "cached", "evicted"):
-                if phase == "evicted":
+            for phase in ("fresh", "cached", "evicted", *(("split",) if split_chunk else ())):
+                if phase in ("evicted", "split"):
                     await asyncio.sleep(settle_s)
                     for f in range(FILLER_PROMPTS):
-                        key = f"correctness/filler/{label}/{length}/{i}/{f}"
+                        key = f"correctness/filler/{label}/{phase}/{length}/{i}/{f}"
                         filler = make_prompt(FILLER_TOKENS, cfg.token_id_range, key)
                         await _complete(client, cfg, filler, 1)
                     await asyncio.sleep(settle_s)
+                if phase == "split":
+                    await _complete(client, cfg, prompt[: length // split_chunk * split_chunk], 1)
                 result = await _complete(client, cfg, prompt, MAX_TOKENS)
                 append_jsonl(path, {"length": length, "i": i, "phase": phase, **result})
     return path

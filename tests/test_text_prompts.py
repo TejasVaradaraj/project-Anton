@@ -1,10 +1,19 @@
+import asyncio
+import json
+from unittest.mock import patch
+
+import httpx
 import pytest
 
+from project_anton.analysis.kv_math import ModelShape
+from project_anton.correctness import compare
 from project_anton.correctness.text_prompts import (
     build_text_prompts,
     load_prompts,
     write_prompts,
 )
+from project_anton.harness.runlog import read_jsonl
+from project_anton.harness.server import ServerConfig
 
 
 def encode(text: str) -> list[int]:
@@ -55,3 +64,32 @@ def test_prompt_of_wrong_length_is_refused(tmp_path):
 def test_empty_prompts_file_is_refused(tmp_path):
     with pytest.raises(ValueError, match="no prompts"):
         load_prompts(tmp_path / "missing.jsonl")
+
+
+def test_record_split_phase_caches_only_whole_chunks(tmp_path):
+    seen = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        seen.append(len(body["prompt"]))
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"logprobs": {"tokens": ["a"], "token_logprobs": [-0.5]}}],
+                "usage": {"prompt_tokens_details": {"cached_tokens": 0}},
+            },
+        )
+
+    prompts = tmp_path / "p.jsonl"
+    write_prompts(prompts, [{"length": 600, "i": 0, "tokens": list(range(600))}])
+    cfg = ServerConfig("t", "m", 1, {}, (0, 10), ModelShape(1, 1, 1))
+    real_client = httpx.AsyncClient
+
+    def fake_client(**kwargs):
+        return real_client(transport=httpx.MockTransport(handler), base_url="http://t")
+
+    with patch.object(compare.httpx, "AsyncClient", fake_client):
+        path = asyncio.run(compare.record(cfg, "x", tmp_path, 0, prompts, split_chunk=256))
+    assert 512 in seen
+    assert seen[-2:] == [512, 600]
+    assert [r["phase"] for r in read_jsonl(path)] == ["fresh", "cached", "evicted", "split"]

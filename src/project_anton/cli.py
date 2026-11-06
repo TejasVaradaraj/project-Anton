@@ -216,7 +216,8 @@ def storage_baseline(args) -> int:
 def correctness_record(args) -> int:
     cfg = load_server_config(args.server)
     prompts = Path(args.prompts) if args.prompts else None
-    print(asyncio.run(record(cfg, args.label, Path(args.out), args.settle, prompts)))
+    run = record(cfg, args.label, Path(args.out), args.settle, prompts, args.split_chunk)
+    print(asyncio.run(run))
     return 0
 
 
@@ -330,6 +331,7 @@ def build_parser() -> argparse.ArgumentParser:
     rec.add_argument("--out", required=True)
     rec.add_argument("--settle", type=float, default=5.0, help="seconds to let saves finish")
     rec.add_argument("--prompts", help="prompts file from make_text_prompts.py; default random")
+    rec.add_argument("--split-chunk", type=int, help="also test with only whole chunks cached")
     rec.set_defaults(func=correctness_record)
 
     cmp_ = check.add_parser("compare")

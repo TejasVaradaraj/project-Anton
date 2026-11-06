@@ -42,7 +42,7 @@ for setup in "$@"; do
     if $A server start --config "$config"; then
         # Record to a temporary label's file, so a crash can't look like a finished setup.
         $A correctness record --server "$config" --label "$setup.partial" --out "$OUT" \
-            --settle "$settle" "${prompts_arg[@]}" &&
+            --settle "$settle" "${prompts_arg[@]}" ${RECORD_ARGS:-} &&
             mv "$OUT/$setup.partial.jsonl" "$OUT/$setup.jsonl" ||
             echo "=== $setup FAILED during recording"
     else
