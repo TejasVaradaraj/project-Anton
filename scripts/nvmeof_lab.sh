@@ -51,6 +51,10 @@ run_fio() { # name device
     fio --name="$name" --filename="$device" --rw=randread --bs=4k --iodepth=1 --direct=1 \
         --ioengine=libaio --runtime=20 --time_based --group_reporting --output-format=json \
         >"$OUT_DIR/${name}_lat_4k.json"
+    # One whole restore of a median agent session: 11,788 tokens x 128 KiB, in LMCache chunks.
+    fio --name="$name" --filename="$device" --rw=read --bs=32M --iodepth=4 --direct=1 \
+        --ioengine=libaio --size=1472M --loops=5 --group_reporting --output-format=json \
+        >"$OUT_DIR/${name}_restore_session.json"
 }
 
 case "$MODE" in
