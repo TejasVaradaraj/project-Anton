@@ -1,0 +1,7 @@
+# One-shot requests with long prompts and no follow-up.
+name: long_context
+kind: long_context
+sessions: 32
+arrival_rate_per_s: 0.5
+seed: 0
+max_context_tokens: 32000

@@ -1,0 +1,5 @@
+# The run recorded in results/week2_agent_load_sessions-*, using the plan's numbers.
+name: week2_agent_load
+trace: configs/traces/agent_plan_assumptions.yaml
+grid:
+  sessions: [1, 2, 4, 8]

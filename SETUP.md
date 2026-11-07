@@ -63,8 +63,8 @@ Cross-check (arithmetic only): 461,216 tokens x 128 KiB/token = 56.30 GiB, and
 `tests/test_kv_math.py` pins them.
 
 **Colab can silently hand you a different GPU.** On 2026-11-05 a new runtime asked for an A100 and
-got an L4, with only a small popup saying so. An existing A100 session was still available in
-another notebook. Check `nvidia-smi` or `env.json` before trusting a run, and delete any fallback
+got an L4, with only a small popup saying so. The Project-Anton notebook did get an A100, but its
+accelerator setting had reverted to CPU after a runtime was deleted, so check that first too. Check `nvidia-smi` or `env.json` before trusting a run, and delete any fallback
 runtime, since it uses units too.
 
 The earlier plan assumed a 40 GB A100. This one has 80 GB, so 8B fits far more KV cache than
@@ -108,15 +108,16 @@ to AWS if the module test above works. Any Soft-RoCE result stays labeled as emu
 ## Software test results (2026-11-05)
 | Check | Result |
 |---|---|
-| `pytest`, Python 3.14 (macOS) | 100 passed |
-| `pytest`, Python 3.12 (macOS) | 100 passed |
+| `pytest`, Python 3.14 (macOS) | 182 passed |
+| `pytest`, Python 3.12 (macOS) | 182 passed |
 | `ruff check` | Passed |
 | Fresh clone, notebook's install steps, Python 3.12 | `anton --help` and imports work |
 | Fake server set to 33,333 tokens/s | Pipeline measured 33,099 tokens/s (0.7% off) |
 | Notebook code on Colab A100 | Server, sweep, analysis, cross-check and stop cells all ran (found 2 bugs, both fixed) |
 | Notebook's Google Drive and archive cells | **Not run** (results were saved locally and downloaded) |
 | Notebook on Kaggle | **Not run** |
-| GitHub Actions CI | Runs on the pull request |
+| GitHub Actions CI | Passed on the Week 1 pull request; Week 2 branch has no pull request yet |
+| Week 2 replay sweep on Colab A100 | Ran: 4 points, 211/211 requests valid, GPU, disk, network and vLLM monitors all recorded |
 
 These check the software only. The fake server's numbers are not performance measurements.
 
@@ -128,5 +129,13 @@ These check the software only. The fake server's numbers are not performance mea
 - **Kaggle/Colab can't load kernel modules.** Storage-protocol work has to run on a VM.
 - **Shared machines.** Kaggle and Colab are shared and virtualized, and the benchmark client runs
   on the same machine as the server, so expect noise. Report spread, not just averages.
+- **Partly calibrated traces.** Agent token counts and steps come from real SWE-agent runs, but tool
+  pauses are still assumptions because no dataset fully checked has timing. Multi-turn and long-context
+  traces aren't calibrated at all. The README has the other gaps.
+- **Replay recomputes each response.** Prompts include the trace's response tokens so runs repeat
+  exactly, but the model generates different tokens, so its cached response can't match. Each turn
+  recomputes one response that a real agent wouldn't, which makes post-tool TTFT slightly pessimistic.
+- **Sweep points share a server.** A later point can start with the cache still holding entries from
+  an earlier one. They can't match its prompts, but they occupy space until evicted.
 - **Synthetic prompts.** Week 1 prompts are random token IDs. Their prefill cost should be
   representative, but they aren't real text, and the generated output is meaningless.

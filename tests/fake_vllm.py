@@ -60,6 +60,16 @@ class FakeVllm:
                 elif method == "GET" and path == "/v1/models":
                     data = [{"id": self.model, "max_model_len": self.max_model_len}]
                     self._send_json(writer, 200, {"data": data})
+                elif method == "GET" and path == "/metrics":
+                    text = (
+                        "# HELP vllm:kv_cache_usage_perc usage\n"
+                        f'vllm:kv_cache_usage_perc{{model_name="{self.model}"}} 0.25\n'
+                        f"vllm:num_requests_running {len(self.requests)}.0\n"
+                        "python_gc_objects_collected_total 7.0\n"
+                    ).encode()
+                    writer.write(
+                        f"HTTP/1.1 200 OK\r\nContent-Length: {len(text)}\r\n\r\n".encode() + text
+                    )
                 elif method == "POST" and path == "/v1/completions":
                     await self._completions(writer, json.loads(body))
                 else:
