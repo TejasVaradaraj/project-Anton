@@ -7,27 +7,25 @@ Needs a GPU machine with vLLM and LMCache installed. Run from the repo root:
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 import time
 import urllib.request
 from pathlib import Path
 
+from project_anton.harness.server import require_verified_offload
+
 TRACE = "configs/traces/agent_pressure.yaml"
 PROXY_URL = "http://127.0.0.1:8100"
-SCENARIOS = (
-    ("A GPU only", "a100_small_gpu_only", False),
-    ("B offload", "a100_small_cpu", False),
-    ("C offload + prefetch", "a100_small_cpu", True),
-    ("D ideal large GPU cache", "a100_llama31_8b", False),
-)
 
 
-# LMCache restores changed model output in Week 4 (see README). Results from these runs would not
-# mean anything until that's resolved, so they must be asked for explicitly.
-if os.environ.get("ANTON_ALLOW_UNVERIFIED_OFFLOAD") != "1":
-    sys.exit("Refusing to run: LMCache restores failed the correctness check.")
+def scenarios(offload: str) -> tuple[tuple[str, str, bool], ...]:
+    return (
+        ("A GPU only", "a100_small_gpu_only", False),
+        ("B offload", offload, False),
+        ("C offload + prefetch", offload, True),
+        ("D ideal large GPU cache", "a100_llama31_8b", False),
+    )
 
 
 def anton(*args: object) -> None:
@@ -48,10 +46,12 @@ def wait_for(url: str, timeout_s: float = 60) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--results-dir", type=Path, required=True)
+    parser.add_argument("--offload", default="a100_small_mp", help="server config for B and C")
     args = parser.parse_args()
+    require_verified_offload()
 
     compare = []
-    for name, server, prefetch in SCENARIOS:
+    for name, server, prefetch in scenarios(args.offload):
         run_id = "scenario_" + name.split()[0]
         run_dir = args.results_dir / run_id
         config = f"configs/servers/{server}.yaml"

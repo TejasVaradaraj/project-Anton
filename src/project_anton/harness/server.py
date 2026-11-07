@@ -3,7 +3,9 @@
 import os
 import re
 import signal
+import socket
 import subprocess
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,6 +24,11 @@ KV_CAPACITY_RE = re.compile(
     r"(?P<pool>\S+) KV cache size: (?P<tokens>[\d,]+) tokens, "
     r"Maximum concurrency for (?P<context>[\d,]+) tokens per request: (?P<concurrency>[\d.]+)x"
 )
+
+
+LMCACHE_PORT = 5555
+# Restores match a normal recompute on this pair, with LMCache 0.5.1. See results/week4_text.
+VERIFIED_VLLM = "0.25.1"
 
 
 @dataclass(frozen=True)
@@ -120,6 +127,53 @@ def start_server(
         )
     pid_path.write_text(str(proc.pid))
     return proc
+
+
+def uses_lmcache_server(cfg: ServerConfig) -> bool:
+    """Multi-process offload needs a separate `lmcache server` that owns the storage."""
+    return "kv-offloading-backend" in cfg.vllm_args
+
+
+def lmcache_server_command(cfg: ServerConfig) -> list[str]:
+    # Colab already uses LMCache's default HTTP port, 8080.
+    size = str(cfg.vllm_args["kv-offloading-size"])
+    return [
+        "lmcache",
+        "server",
+        "--host",
+        "localhost",
+        "--port",
+        str(LMCACHE_PORT),
+        "--l1-size-gb",
+        size,
+        "--eviction-policy",
+        "LRU",
+        "--http-port",
+        "8091",
+    ]
+
+
+def wait_for_port(port: int, proc: subprocess.Popen, timeout_s: float = 180) -> None:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            raise RuntimeError(f"server exited with code {proc.returncode}")
+        with socket.socket() as s:
+            s.settimeout(1)
+            if s.connect_ex(("127.0.0.1", port)) == 0:
+                return
+        time.sleep(0.5)
+    raise TimeoutError(f"nothing listening on port {port}")
+
+
+def require_verified_offload() -> None:
+    """Refuse offload runs on versions whose restores failed the correctness check."""
+    output = subprocess.run(["vllm", "--version"], capture_output=True, text=True, check=True)
+    version = output.stdout.strip().splitlines()[-1]
+    if version != VERIFIED_VLLM and os.environ.get("ANTON_ALLOW_UNVERIFIED_OFFLOAD") != "1":
+        sys.exit(
+            f"Refusing to run: restores are only verified on vLLM {VERIFIED_VLLM}, not {version}."
+        )
 
 
 def stop_server(pid_path: Path, grace_s: float = 30) -> bool:

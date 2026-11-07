@@ -21,15 +21,10 @@ for setup in "$@"; do
     fi
     echo "=== $setup"
     settle=5
-    lmcache_pid=
     case "$setup" in
     mp | mp60)
         config=configs/servers/a100_small_mp.yaml
         [ "$setup" = mp60 ] && settle=60
-        lmcache server --host localhost --port 5555 --l1-size-gb 100 --eviction-policy LRU \
-            --http-port 8091 >"$OUT/$setup.lmcache.log" 2>&1 &
-        lmcache_pid=$!
-        sleep 40
         ;;
     *) config=configs/servers/a100_small_$setup.yaml ;;
     esac
@@ -50,7 +45,6 @@ for setup in "$@"; do
     fi
     $A server stop --config "$config"
     cp "logs/$(basename "$config" .yaml).log" "$OUT/$setup.vllm.log" 2>/dev/null
-    [ -n "$lmcache_pid" ] && kill "$lmcache_pid"
     pkill -9 -f 'vllm serve' 2>/dev/null
     pkill -9 -f EngineCore 2>/dev/null
     pkill -9 -f 'lmcache server' 2>/dev/null

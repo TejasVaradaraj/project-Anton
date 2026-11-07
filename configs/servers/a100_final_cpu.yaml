@@ -1,0 +1,16 @@
+name: a100_final_cpu
+model: meta-llama/Llama-3.1-8B-Instruct
+port: 8000
+vllm_args:
+  dtype: bfloat16
+  max-model-len: 32768
+  kv-cache-memory: 47244640256 # 44 GiB in every a100_final config
+  enable-prefix-caching: true
+  enable-prompt-tokens-details: true
+  kv-transfer-config: '{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_both"}'
+env:
+  LMCACHE_CHUNK_SIZE: "256"
+  LMCACHE_LOCAL_CPU: "True"
+  LMCACHE_MAX_LOCAL_CPU_SIZE: "100"
+token_id_range: [0, 128000]
+kv_shape: { layers: 32, kv_heads: 8, head_dim: 128, dtype_bytes: 2 }

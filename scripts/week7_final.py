@@ -6,15 +6,11 @@ Run from the repo root on a GPU machine:
 """
 
 import argparse
-import os
 import subprocess
 import sys
 from pathlib import Path
 
-# LMCache restores changed model output in Week 4 (see README). Results from these runs would not
-# mean anything until that's resolved, so they must be asked for explicitly.
-if os.environ.get("ANTON_ALLOW_UNVERIFIED_OFFLOAD") != "1":
-    sys.exit("Refusing to run: LMCache restores failed the correctness check.")
+from project_anton.harness.server import require_verified_offload
 
 
 def anton(*args: object) -> None:
@@ -25,10 +21,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--results-dir", type=Path, required=True)
     args = parser.parse_args()
+    require_verified_offload()
     out = args.results_dir
     out.mkdir(parents=True, exist_ok=True)
 
-    server = "configs/servers/a100_small_cpu.yaml"
+    server = "configs/servers/a100_small_mp.yaml"
     anton("server", "start", "--config", server)
     try:
         anton(
@@ -46,12 +43,20 @@ def main() -> None:
     finally:
         anton("server", "stop", "--config", server)
     anton(
-        "tiers", "compare", "--run", f"CPU RAM={out / 'alignment_cpu'}", "--out", out / "alignment"
+        "tiers",
+        "compare",
+        "--run",
+        f"Multi-process={out / 'alignment_cpu'}",
+        "--out",
+        out / "alignment",
     )
 
+    # Every setup gets the same GPU cache size, so the only difference is offload. The size leaves
+    # room for the 9 GB of GPU memory that the multi-process LMCache server uses.
     for sweep, server in (
-        ("week7_gpu_only", "configs/servers/a100_llama31_8b.yaml"),
-        ("week7_lmcache", "configs/servers/a100_llama31_8b_lmcache.yaml"),
+        ("final_gpu_only", "configs/servers/a100_final_gpu_only.yaml"),
+        ("final_cpu", "configs/servers/a100_final_cpu.yaml"),
+        ("final_mp", "configs/servers/a100_final_mp.yaml"),
     ):
         anton("server", "start", "--config", server)
         try:
@@ -71,9 +76,11 @@ def main() -> None:
         "replay",
         "compare",
         "--sweep",
-        "week7_gpu_only",
+        "final_gpu_only",
         "--sweep",
-        "week7_lmcache",
+        "final_cpu",
+        "--sweep",
+        "final_mp",
         "--results-dir",
         out,
         "--out",

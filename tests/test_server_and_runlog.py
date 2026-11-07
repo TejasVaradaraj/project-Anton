@@ -13,10 +13,13 @@ from project_anton.harness.runlog import append_jsonl, capture_environment, read
 from project_anton.harness.server import (
     ServerConfig,
     build_command,
+    lmcache_server_command,
     load_server_config,
     parse_kv_capacity,
+    require_verified_offload,
     start_server,
     stop_server,
+    uses_lmcache_server,
     wait_until_healthy,
 )
 from project_anton.harness.ttft_bench import load_sweep_config
@@ -218,3 +221,36 @@ def test_jsonl_raises_on_corruption_mid_file(tmp_path):
 
 def test_jsonl_missing_file_is_empty(tmp_path):
     assert read_jsonl(tmp_path / "none.jsonl") == []
+
+
+def test_lmcache_server_only_for_multi_process_configs():
+    mp = load_server_config(CONFIGS / "servers" / "a100_small_mp.yaml")
+    assert uses_lmcache_server(mp)
+    assert lmcache_server_command(mp)[mp_size_index(mp) :][:1] == ["100"]
+    assert not uses_lmcache_server(load_server_config(CONFIGS / "servers" / "a100_small_cpu.yaml"))
+
+
+def mp_size_index(cfg: ServerConfig) -> int:
+    return lmcache_server_command(cfg).index("--l1-size-gb") + 1
+
+
+@pytest.mark.parametrize(
+    ("version", "allow", "refused"),
+    [
+        ("0.25.1", None, False),
+        ("0.33.0", None, True),
+        ("0.33.0", "1", False),
+    ],
+)
+def test_offload_runs_need_verified_versions(monkeypatch, version, allow, refused):
+    output = subprocess.CompletedProcess([], 0, stdout=f"warning line\n{version}\n")
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: output)
+    if allow:
+        monkeypatch.setenv("ANTON_ALLOW_UNVERIFIED_OFFLOAD", allow)
+    else:
+        monkeypatch.delenv("ANTON_ALLOW_UNVERIFIED_OFFLOAD", raising=False)
+    if refused:
+        with pytest.raises(SystemExit, match="Refusing"):
+            require_verified_offload()
+    else:
+        require_verified_offload()

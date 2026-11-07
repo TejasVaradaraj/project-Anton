@@ -17,10 +17,14 @@ from project_anton.correctness.compare import compare_files, record
 from project_anton.harness.replay import load_replay_sweep, run_grid, run_replay
 from project_anton.harness.runlog import capture_environment, make_run_id, write_json
 from project_anton.harness.server import (
+    LMCACHE_PORT,
+    lmcache_server_command,
     load_server_config,
     parse_kv_capacity,
     start_server,
     stop_server,
+    uses_lmcache_server,
+    wait_for_port,
     wait_until_healthy,
 )
 from project_anton.harness.storage import run_baseline
@@ -39,14 +43,22 @@ def _paths(name: str) -> tuple[Path, Path]:
 def server_start(args) -> int:
     cfg = load_server_config(args.config)
     log_path, pid_path = _paths(cfg.name)
-    proc = start_server(cfg, log_path, pid_path)
-    print(f"started {cfg.model} pid={proc.pid}, log at {log_path}")
+    lmcache_log, lmcache_pid = _paths(f"{cfg.name}.lmcache")
     try:
+        if uses_lmcache_server(cfg):
+            lmcache = start_server(cfg, lmcache_log, lmcache_pid, lmcache_server_command(cfg))
+            wait_for_port(LMCACHE_PORT, lmcache)
+        proc = start_server(cfg, log_path, pid_path)
+        print(f"started {cfg.model} pid={proc.pid}, log at {log_path}")
         wait_until_healthy(cfg.base_url, proc, timeout_s=args.timeout)
     except (RuntimeError, TimeoutError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        print("".join(log_path.read_text(errors="replace").splitlines(True)[-30:]), file=sys.stderr)
+        for path in (lmcache_log, log_path):
+            if path.exists():
+                lines = path.read_text(errors="replace").splitlines(True)[-30:]
+                print("".join(lines), file=sys.stderr)
         stop_server(pid_path)
+        stop_server(lmcache_pid)
         return 1
     print(f"healthy at {cfg.base_url}")
     print(f"kv capacity: {parse_kv_capacity(log_path.read_text(errors='replace'))}")
@@ -56,6 +68,7 @@ def server_start(args) -> int:
 def server_stop(args) -> int:
     cfg = load_server_config(args.config)
     stopped = stop_server(_paths(cfg.name)[1])
+    stop_server(_paths(f"{cfg.name}.lmcache")[1])
     print("stopped" if stopped else "nothing was running")
     return 0
 
