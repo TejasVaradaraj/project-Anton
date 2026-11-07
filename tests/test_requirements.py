@@ -1,9 +1,11 @@
+import pandas as pd
 import pytest
 
 from project_anton.analysis.requirements import (
     LLAMA_8B,
     agent_workloads,
     measured_requirements,
+    measured_restores,
     projected_70b,
     requirement_row,
     saved_seconds,
@@ -54,3 +56,32 @@ def test_70b_needs_2_5x_the_bytes_per_token():
 def test_agent_workloads_use_real_percentiles():
     calibration = {"final_context_tokens": {"p50": 11788.2, "p75": 28335.0, "p90": 30337.0}}
     assert agent_workloads(calibration)["Agent, median session"] == 11788
+
+
+def test_measured_restores_compare_delivered_with_break_even():
+    tiers = pd.DataFrame(
+        [
+            {
+                "tier": "Multi-process",
+                "prompt_tokens": 1000,
+                "external_hits_p50": 1000,
+                "cold_ttft_ms": 1100.0,
+                "warm_ttft_ms": 100.0,
+                "load_ms": 100.0,
+            },
+            {
+                "tier": "GPU only",
+                "prompt_tokens": 1000,
+                "external_hits_p50": 0,
+                "cold_ttft_ms": 1100.0,
+                "warm_ttft_ms": 100.0,
+                "load_ms": 1000.0,
+            },
+        ]
+    )
+    table = measured_restores(tiers, "Multi-process")
+    assert len(table) == 1
+    row = table.iloc[0]
+    # 1000 tokens x 128 KiB = 0.131 GB.
+    assert row["delivered_gbytes_per_s"] == pytest.approx(1.31072)
+    assert row["break_even_gbytes_per_s"] == pytest.approx(0.131072)
