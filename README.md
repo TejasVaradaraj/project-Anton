@@ -7,11 +7,25 @@ agent's KV cache (the model's saved work for each token it has read), so the nex
 recompute a long context. This project measures how well moving that cache to cheaper storage and
 prefetching it back works, and how fast the storage must be for that to pay off.
 
-## Status
+## Status and main results
 
-**Stopped early, on purpose: restored KV caches changed the model's output, with no error reported.** That
-held across every LMCache path tested with vLLM 0.33.0 on this setup, so prefetch and final sweeps weren't
-run on a GPU. [REPORT.md](REPORT.md) has the findings, what's done, what isn't, and the next steps.
+**Done.** [REPORT.md](REPORT.md) has the full results. On one A100 80GB with Llama-3.1-8B:
+
+- **Offload works once restores are correct.** On a cache-starved agent workload, LMCache's
+  multi-process mode doubled goodput (62 to 130 tokens/s) and cut post-tool p95 TTFT from 9.2 s to
+  1.7 s. At 96 concurrent agents on the same GPU cache, it kept 3.3x the goodput of GPU-only serving.
+- **Prefetch didn't help.** Warm-ups before a tool finished gave 7-12% lower goodput than plain offload,
+  across four runs and three lead times.
+- **Restores can silently give wrong answers.** vLLM 0.33.0 with LMCache 0.5.6 or 0.5.7 changed the model's
+  output on most restored prompts, with no error. vLLM 0.25.1 with LMCache 0.5.1 passes in multi-process
+  mode, while its in-process mode fails on prompts that are exact multiples of 256 tokens.
+- **Storage target:** a restore must deliver about 1.2-1.9 GB/s to beat recomputing. Multi-process
+  delivered up to 12.2 GB/s from CPU RAM, and NVMe-oF across two AWS VMs about 0.96 GB/s.
+
+![Final sweep: GPU only against offload](results/final/sweep/comparison/cliff.png)
+
+The sections below are the week-by-week record. Weeks 3 and 4 were first run on vLLM 0.33.0 with LMCache
+0.5.6, before the correctness failure was found, and are kept as that record.
 
 ## Week 1 result: what the prefix cache saves
 
@@ -69,7 +83,7 @@ All 211 requests were valid, and every request met the TTFT under 2 s and TPOT u
   it isn't a measure of how full the cache is. "Previous prompt cached" is the better early signal.
 - Each row is one short run. Sweep points shared one server, one after another.
 
-## Week 3 result: the cliff, and what CPU offload does to it
+## Week 3, first attempt: the cliff, and what CPU offload does to it
 
 Calibrated agents arriving at 1 per second, on the full 56 GiB GPU KV cache, with and without LMCache
 0.5.6 offloading to CPU RAM. Goodput counts requests meeting TTFT under 2 s and TPOT under 100 ms.
@@ -105,7 +119,7 @@ Calibrated agents arriving at 1 per second, on the full 56 GiB GPU KV cache, wit
   fixed now. Most points lost 0-2 requests, but LMCache at 64 sessions lost 11 sessions' remaining
   requests, sending 13% less load, so that row isn't a fair comparison.
 
-## Week 4 result: restores are slow, and their output is wrong
+## Week 4, first attempt: restores are slow, and their output is wrong
 
 On an 8 GiB GPU cache, each prompt is sent cold, then warm, then evicted with filler prompts and sent
 again. LMCache 0.5.6 with vLLM 0.33.0, 5 repeats per length, 60/60 requests valid per tier.
@@ -147,7 +161,22 @@ text. [REPORT.md](REPORT.md) covers the leads and next steps.
   256-token chunk, and the other lengths aren't, but that link is untested.
 - Whether the disk reads reached the disk wasn't confirmed against the disk logs.
 
-## Week 5 check: NVMe-oF on a local VM
+## Week 5: NVMe-oF over a real network
+
+A RAM disk served over NVMe-oF between two AWS VMs (`m7i-flex.large`, the type this account allowed), read
+with fio at LMCache's 32 MiB chunk size. Results are in [`results/week5_aws`](results/week5_aws).
+
+| Path | Read, 32 MiB chunks (GB/s) | 4 KiB at depth 1, p50 (us) | One median agent session (1.5 GB) |
+|---|---:|---:|---:|
+| RAM disk on the target, no network | 7.98 | 0.3 | About 0.2 s |
+| NVMe-oF over TCP | 0.96 | 95 | About 1.6 s |
+| NVMe-oF over Soft-RoCE (emulated RDMA) | 0.97 | 117 | About 1.7 s |
+
+The network set the limit: one flow peaked at 5 Gbit/s and four reached 12.4 Gbit/s. A median session
+needs about 1.6 GB/s to beat recomputing, so this path would lose. Soft-RoCE is software, so it says
+nothing about RDMA hardware.
+
+## Week 5, earlier check: NVMe-oF on a local VM
 
 A RAM disk served over NVMe-oF with real Linux kernel drivers, in a Linux VM on a Mac, read with fio at
 LMCache's 32 MiB chunk size. Results are in [`results/week5_mac_vm_lab`](results/week5_mac_vm_lab).
@@ -267,9 +296,12 @@ uv run anton replay sweep --server configs/servers/a100_llama31_8b.yaml --sweep 
 |---|---|
 | `src/project_anton/harness/` | Streaming client, sweep and replay runners, server control, system monitor, run logging |
 | `src/project_anton/traces/` | Seeded agent, multi-turn and long-context workloads |
-| `src/project_anton/analysis/` | KV size math, summaries, goodput, prefill fit, plots |
+| `src/project_anton/analysis/` | KV size math, summaries, goodput, prefill fit, requirements, plots |
+| `src/project_anton/correctness/` | Fresh, cached, evicted and split comparisons of greedy output |
+| `src/project_anton/proxy/` | The agent-aware prefetch proxy |
 | `configs/` | Server, sweep and trace settings, plus trace calibration data |
-| `scripts/` | Reruns the trace calibration |
+| `scripts/` | Trace calibration, NVMe-oF lab, correctness matrix, and the final GPU runs |
+| `docs/` | Talk outline, resume lines, and a draft LMCache bug report |
 | `notebooks/` | Kaggle and Colab entry points |
 | `tests/` | Unit tests, plus a fake vLLM server on a real socket |
 | `results/<run_id>/` | Summaries in git; `raw/` stays out of git |

@@ -1,0 +1,3 @@
+[  5]   0.00-15.00  sec  8.67 GBytes  4.96 Gbits/sec                  
+[SUM]   0.00-15.00  sec  17.3 GBytes  9.93 Gbits/sec                  
+[SUM]   0.00-15.00  sec  21.7 GBytes  12.4 Gbits/sec                  

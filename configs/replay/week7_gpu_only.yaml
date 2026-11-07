@@ -1,7 +1,0 @@
-# Final sweep with the client fix, narrowing in on the cliff. Also repeats Week 3's 64 and 96 sessions
-# in a new session, as a check on repeatability.
-name: week7_gpu_only
-trace: configs/traces/agent.yaml
-grid:
-  arrival_rate_per_s: [1.0]
-  sessions: [64, 80, 96]

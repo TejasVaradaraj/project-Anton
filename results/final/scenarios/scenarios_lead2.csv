@@ -1,0 +1,2 @@
+scenario,requests_valid,requests_total,previous_cached_mean,after_tool_ttft_p50_ms,after_tool_ttft_p95_ms,after_tool_ttft_p99_ms,tpot_p50_ms,slo_met_fraction,goodput_tokens_per_s,agent_task_s_p50,external_cache_hits,warmups_sent,cancelled_tool_ended_first,late_still_running,completed_before_request,early_by_p50_s
+C offload + prefetch,546,546,0.9870,159.0202,3100.5737,5033.1760,15.8653,0.8974,114.7872,161.8079,2695392.0000,472,25,82,390,0.5980

@@ -1,0 +1,5 @@
+tier,prompt_tokens,restored_gbytes,recompute_ms,restore_ms,delivered_gbytes_per_s,break_even_gbytes_per_s
+Multi-process,1000,0.101,55.312,30.234,3.330,1.820
+Multi-process,4000,0.503,260.213,62.174,8.095,1.934
+Multi-process,16000,2.080,1350.204,192.150,10.827,1.541
+Multi-process,32000,4.194,3466.976,342.988,12.229,1.210

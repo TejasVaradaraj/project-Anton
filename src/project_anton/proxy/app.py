@@ -97,7 +97,8 @@ def create_app(upstream: str, lead_s: float = 0.5, prefetch: bool = True) -> Fas
         try:
             response = await clients["up"].post("/v1/completions", json=body)
             response.raise_for_status()
-            state.warmup_finished = time.monotonic()
+            if state.warmup is asyncio.current_task():
+                state.warmup_finished = time.monotonic()
         except httpx.HTTPError:
             stats.warmups_failed += 1
 
@@ -126,11 +127,13 @@ def create_app(upstream: str, lead_s: float = 0.5, prefetch: bool = True) -> Fas
             if state.warmup_finished is not None:
                 stats.early_by_s.append(now - state.warmup_finished)
             elif not warmup.done():
+                # Never cancel one that's sent: aborting a request while its KV cache is loading
+                # crashes the vLLM engine (assert req_id in self.requests).
                 if state.warmup_sending:
                     stats.late_still_running += 1
                 else:
                     stats.cancelled_tool_ended_first += 1
-                warmup.cancel()
+                    warmup.cancel()
         state.tool = state.tool_started = state.warmup = state.warmup_finished = None
         state.warmup_sending = False
 

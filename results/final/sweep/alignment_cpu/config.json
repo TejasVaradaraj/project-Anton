@@ -1,0 +1,47 @@
+{
+  "run_id": "alignment_cpu",
+  "server": {
+    "env": {},
+    "kv_shape": {
+      "dtype_bytes": 2,
+      "head_dim": 128,
+      "kv_heads": 8,
+      "layers": 32
+    },
+    "model": "meta-llama/Llama-3.1-8B-Instruct",
+    "name": "a100_small_mp",
+    "port": 8000,
+    "token_id_range": [
+      0,
+      128000
+    ],
+    "vllm_args": {
+      "disable-hybrid-kv-cache-manager": true,
+      "dtype": "bfloat16",
+      "enable-prefix-caching": true,
+      "enable-prompt-tokens-details": true,
+      "gpu-memory-utilization": 0.8,
+      "kv-cache-memory": 8589934592,
+      "kv-offloading-backend": "lmcache",
+      "kv-offloading-size": 100,
+      "max-model-len": 32768
+    }
+  },
+  "tier": {
+    "filler_prompts": 8,
+    "filler_tokens": 16000,
+    "max_tokens": 16,
+    "name": "alignment",
+    "prompt_lengths": [
+      15872,
+      16000,
+      16128,
+      31744,
+      31900,
+      32000
+    ],
+    "reps": 3,
+    "seed": 1,
+    "settle_s": 5
+  }
+}

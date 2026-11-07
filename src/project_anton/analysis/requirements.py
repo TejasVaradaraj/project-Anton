@@ -98,3 +98,45 @@ def build_requirements(week1_analysis: Path, calibration: Path, out_dir: Path) -
         out_dir / "projection_70b.csv", index=False, float_format="%.3f"
     )
     return measured
+
+
+def measured_restores(tiers: pd.DataFrame, tier: str, shape: ModelShape = LLAMA_8B) -> pd.DataFrame:
+    """What a restore needed, against what a tier delivered, from one tier comparison table."""
+    token_bytes = kv_bytes_per_token(shape)
+    rows = []
+    for row in tiers[tiers["tier"] == tier].itertuples():
+        restored_gbytes = row.external_hits_p50 * token_bytes / 1e9
+        saved_ms = row.cold_ttft_ms - row.warm_ttft_ms
+        rows.append(
+            {
+                "tier": tier,
+                "prompt_tokens": row.prompt_tokens,
+                "restored_gbytes": restored_gbytes,
+                "recompute_ms": saved_ms,
+                "restore_ms": row.load_ms,
+                "delivered_gbytes_per_s": restored_gbytes / row.load_ms * 1000,
+                "break_even_gbytes_per_s": restored_gbytes / saved_ms * 1000,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_final_requirements(tiers_csv: Path, calibration: Path, out_dir: Path) -> pd.DataFrame:
+    """The requirements table from the final runs, with restores that passed correctness."""
+    tiers = pd.read_csv(tiers_csv)
+    gpu_only = tiers[tiers["tier"] == "GPU only"]
+    by_length = [
+        {
+            "prompt_tokens": row.prompt_tokens,
+            "cold_ttft_s": row.cold_ttft_ms / 1000,
+            "warm_ttft_s": row.warm_ttft_ms / 1000,
+        }
+        for row in gpu_only.itertuples()
+    ]
+    workloads = agent_workloads(json.loads(calibration.read_text()))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    table = measured_requirements(by_length, workloads)
+    table.to_csv(out_dir / "requirements_final_8b.csv", index=False, float_format="%.3f")
+    restores = measured_restores(tiers, "Multi-process")
+    restores.to_csv(out_dir / "multi_process_restores.csv", index=False, float_format="%.3f")
+    return table

@@ -21,11 +21,15 @@ own `env.json`, which is the authoritative record for that run.
 | Kaggle T4 + Qwen2.5-0.5B via vLLM | Works |
 | Kaggle T4 + Llama-3.2-3B | Not run. Dropped from Week 1: Kaggle stays a Qwen test bed, and the A100 does the Llama runs |
 | Colab A100 + Llama-3.1-8B bf16, 32,768 context | Works, measured in Weeks 1-4 (see README) |
-| LMCache 0.5.6 on Colab A100 | Runs, but restores fail the correctness check (see REPORT.md) |
+| LMCache 0.5.6 and 0.5.7 with vLLM 0.33.0 | Run, but restores fail the correctness check (see REPORT.md) |
+| LMCache 0.5.1 with vLLM 0.25.1, multi-process | **Passes the correctness check. Used for all final runs** |
+| LMCache 0.5.1 with vLLM 0.25.1, in-process | Fails on prompts that are exact multiples of 256 tokens |
+| AWS EC2, Ubuntu 24.04, kernel 7.0.0-1014-aws | nvmet, nvmet-tcp, nvme-rdma and rdma_rxe all load; NVMe-oF ran between 2 VMs |
+| Colab CLI (`google-colab-cli`) | Works for runs, file copies and stopping sessions. It can't read Colab Secrets |
 | Hugging Face gated model access | Approved and tested |
 | Datadog | Account and API key configured |
 | AWS EC2 SSH | Works |
-| NVMe-oF target + Soft-RoCE on AWS | **Blocked on the tested image** (see AWS). All modules load in a local Lima VM with Ubuntu 24.04 |
+| NVMe-oF target + Soft-RoCE on AWS | Works on Ubuntu 24.04. Amazon Linux lacked the modules. The free plan allows only small instance types |
 | Azure | **Blocked**: subscription restrictions stop VM creation |
 
 **iCloud problem on this Mac.** The repo is on an iCloud-synced Desktop, and iCloud marks files in
@@ -141,3 +145,13 @@ These check the software only. The fake server's numbers are not performance mea
   an earlier one. They can't match its prompts, but they occupy space until evicted.
 - **Synthetic prompts.** Week 1 prompts are random token IDs. Their prefill cost should be
   representative, but they aren't real text, and the generated output is meaningless.
+
+## Final runs (2026-11-06 and 2026-11-07)
+| Item | Value |
+|---|---|
+| vLLM | 0.25.1, in its own virtualenv at `/tmp/old` (`scripts/colab_setup.sh`) |
+| LMCache | 0.5.1, multi-process: `lmcache server --l1-size-gb 100 --eviction-policy LRU --http-port 8091` |
+| Model | meta-llama/Llama-3.1-8B-Instruct, bf16, from Meta's repo |
+| GPU cache in the final sweep | 44 GiB for every setup (`configs/servers/a100_final_*.yaml`) |
+| Colab units used | About 86 for these runs, plus about 44 on 2026-11-05, at 8.88 units/hour |
+| AWS spend | Under $1 by estimate. Everything was deleted afterward |
