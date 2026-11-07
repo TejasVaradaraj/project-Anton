@@ -1,0 +1,48 @@
+{
+  "run_id": "tiers_disk",
+  "server": {
+    "env": {
+      "LMCACHE_CHUNK_SIZE": "256",
+      "LMCACHE_LOCAL_CPU": "False",
+      "LMCACHE_LOCAL_DISK": "/content/lmcache_disk/",
+      "LMCACHE_MAX_LOCAL_CPU_SIZE": "5",
+      "LMCACHE_MAX_LOCAL_DISK_SIZE": "100"
+    },
+    "kv_shape": {
+      "dtype_bytes": 2,
+      "head_dim": 128,
+      "kv_heads": 8,
+      "layers": 32
+    },
+    "model": "meta-llama/Llama-3.1-8B-Instruct",
+    "name": "a100_small_disk",
+    "port": 8000,
+    "token_id_range": [
+      0,
+      128000
+    ],
+    "vllm_args": {
+      "dtype": "bfloat16",
+      "enable-prefix-caching": true,
+      "enable-prompt-tokens-details": true,
+      "kv-cache-memory": 8589934592,
+      "kv-transfer-config": "{\"kv_connector\":\"LMCacheConnectorV1\",\"kv_role\":\"kv_both\"}",
+      "max-model-len": 32768
+    }
+  },
+  "tier": {
+    "filler_prompts": 8,
+    "filler_tokens": 16000,
+    "max_tokens": 16,
+    "name": "week4",
+    "prompt_lengths": [
+      1000,
+      4000,
+      16000,
+      32000
+    ],
+    "reps": 5,
+    "seed": 0,
+    "settle_s": 5
+  }
+}
