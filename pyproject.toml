@@ -1,12 +1,12 @@
 [project]
 name = "project-anton"
 version = "0.1.0"
-description = "Add your description here"
+description = "Agent-aware KV cache offloading and prefetching benchmark"
 readme = "README.md"
 authors = [
     { name = "Tejasvi Varadaraj", email = "tejasvipradhyumna@gmail.com" }
 ]
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.28.1",
     "matplotlib>=3.11.2",
@@ -15,6 +15,9 @@ dependencies = [
     "pyarrow>=26.0.1",
     "pyyaml>=6.0.3",
 ]
+
+[project.scripts]
+anton = "project_anton.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.12.3,<0.13.0"]
@@ -25,3 +28,14 @@ dev = [
     "pytest>=9.2.0",
     "ruff>=0.17.3",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]
+
+[tool.ruff]
+line-length = 100
+extend-exclude = ["notebooks"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

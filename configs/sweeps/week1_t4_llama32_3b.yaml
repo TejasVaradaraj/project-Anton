@@ -1,0 +1,7 @@
+# Week 1 plan: TTFT vs prompt length from 1k to 16k tokens, cold vs warm.
+name: ttft
+prompt_lengths: [1000, 2000, 4000, 8000, 16000]
+reps: 5
+max_tokens: 32
+warmup_requests: 2
+seed: 0

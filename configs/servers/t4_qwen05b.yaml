@@ -1,0 +1,13 @@
+# Smoke test: small, ungated, and fast to download. Qwen has served on Kaggle T4 before.
+# Its 4k limit means it can't cover the 1k-16k sweep, so it only proves the pipeline works.
+name: t4_qwen05b
+model: Qwen/Qwen2.5-0.5B-Instruct
+port: 8000
+vllm_args:
+  dtype: half # T4 has no bf16
+  max-model-len: 4096
+  enable-prefix-caching: true
+  enable-prompt-tokens-details: true
+token_id_range: [0, 151643] # IDs from 151643 up are special tokens
+# Values from the model's config.json on Hugging Face.
+kv_shape: { layers: 24, kv_heads: 2, head_dim: 64, dtype_bytes: 2 }

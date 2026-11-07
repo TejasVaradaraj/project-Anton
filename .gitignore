@@ -223,3 +223,8 @@ results/raw/
 .env
 *.log
 .ipynb_checkpoints/
+# Project Anton
+.DS_Store
+# Raw per-request data stays out of git; summaries in results/<run_id>/ are committed.
+results/*/raw/
+logs/
