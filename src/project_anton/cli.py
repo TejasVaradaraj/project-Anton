@@ -7,8 +7,13 @@ import shutil
 import sys
 from pathlib import Path
 
+from project_anton.analysis.cliff import compare_sweeps
 from project_anton.analysis.replay import analyze_replay
+from project_anton.analysis.requirements import build_requirements
+from project_anton.analysis.scenarios import compare_scenarios
+from project_anton.analysis.tiers import compare_tiers
 from project_anton.analysis.ttft import analyze_run
+from project_anton.correctness.compare import compare_files, record
 from project_anton.harness.replay import load_replay_sweep, run_grid, run_replay
 from project_anton.harness.runlog import capture_environment, make_run_id, write_json
 from project_anton.harness.server import (
@@ -18,7 +23,9 @@ from project_anton.harness.server import (
     stop_server,
     wait_until_healthy,
 )
+from project_anton.harness.storage import run_baseline
 from project_anton.harness.sysmon import SystemMonitor
+from project_anton.harness.tiers import load_tier_config, run_tiers
 from project_anton.harness.ttft_bench import load_sweep_config, run_sweep
 from project_anton.traces.generators import load_trace_config
 
@@ -114,7 +121,7 @@ def replay_run(args) -> int:
 
     async def go():
         async with SystemMonitor(run_dir / "raw" / "sysmon", cfg.base_url):
-            await run_replay(cfg, trace, run_id, run_dir)
+            await run_replay(cfg, trace, run_id, run_dir, proxy_url=args.proxy)
 
     try:
         asyncio.run(go())
@@ -140,6 +147,83 @@ def replay_sweep(args) -> int:
         _save_server_log(cfg, results_dir / run_id)
         analyze_replay(results_dir / run_id)
     print(f"{len(finished)} points finished in {results_dir}")
+    return 0
+
+
+def replay_compare(args) -> int:
+    table = compare_sweeps(Path(args.results_dir), args.sweep, Path(args.out))
+    print(table.to_string(index=False))
+    return 0
+
+
+def replay_scenarios(args) -> int:
+    runs = dict(item.split("=", 1) for item in args.run)
+    table = compare_scenarios({k: Path(v) for k, v in runs.items()}, Path(args.out))
+    print(table.to_string(index=False))
+    return 0
+
+
+def requirements(args) -> int:
+    table = build_requirements(Path(args.week1), Path(args.calibration), Path(args.out))
+    print(table.to_string(index=False))
+    return 0
+
+
+def proxy_serve(args) -> int:
+    import uvicorn
+
+    from project_anton.proxy.app import create_app
+
+    app = create_app(args.upstream, lead_s=args.lead, prefetch=not args.no_prefetch)
+    uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
+    return 0
+
+
+def tiers_run(args) -> int:
+    cfg = load_server_config(args.server)
+    tier = load_tier_config(args.tier)
+    run_id = args.run_id or make_run_id(f"{cfg.name}_{tier.name}")
+    run_dir = Path(args.results_dir) / run_id
+    _record_env(cfg, run_dir)
+    drop_dir = Path(args.drop_cache_dir) if args.drop_cache_dir else None
+
+    async def go():
+        async with SystemMonitor(run_dir / "raw" / "sysmon", cfg.base_url):
+            await run_tiers(cfg, tier, run_id, run_dir, drop_cache_dir=drop_dir)
+
+    try:
+        asyncio.run(go())
+    finally:
+        _save_server_log(cfg, run_dir)
+    print(f"results in {run_dir}")
+    return 0
+
+
+def tiers_compare(args) -> int:
+    runs = dict(item.split("=", 1) for item in args.run)
+    table = compare_tiers({k: Path(v) for k, v in runs.items()}, Path(args.out))
+    print(table.to_string(index=False))
+    return 0
+
+
+def storage_baseline(args) -> int:
+    results = run_baseline(Path(args.dir), size=args.size, runtime_s=args.runtime)
+    write_json(Path(args.out), results)
+    print(json.dumps(results, indent=2))
+    return 0
+
+
+def correctness_record(args) -> int:
+    cfg = load_server_config(args.server)
+    print(asyncio.run(record(cfg, args.label, Path(args.out), settle_s=args.settle)))
+    return 0
+
+
+def correctness_compare(args) -> int:
+    others = dict(item.split("=", 1) for item in args.run)
+    report = compare_files(Path(args.baseline), {k: Path(v) for k, v in others.items()})
+    write_json(Path(args.out), report)
+    print(json.dumps(report, indent=2))
     return 0
 
 
@@ -174,6 +258,7 @@ def build_parser() -> argparse.ArgumentParser:
     run = replay.add_parser("run")
     run.add_argument("--server", required=True)
     run.add_argument("--trace", required=True)
+    run.add_argument("--proxy", help="send requests through the prefetch proxy at this URL")
     run.add_argument("--run-id", help="reuse an ID to resume a stopped run")
     run.add_argument("--results-dir", default="results")
     run.set_defaults(func=replay_run)
@@ -187,10 +272,75 @@ def build_parser() -> argparse.ArgumentParser:
     grid.add_argument("--sweep", required=True)
     grid.add_argument("--results-dir", default="results")
     grid.set_defaults(func=replay_sweep)
+
+    compare = replay.add_parser("compare", help="tabulate and plot finished sweeps")
+    compare.add_argument("--sweep", action="append", required=True, help="repeat for each sweep")
+    compare.add_argument("--results-dir", default="results")
+    compare.add_argument("--out", required=True)
+    compare.set_defaults(func=replay_compare)
+
+    scenarios = replay.add_parser("scenarios", help="compare setups on one workload")
+    scenarios.add_argument("--run", action="append", required=True, help="name=run folder")
+    scenarios.add_argument("--out", required=True)
+    scenarios.set_defaults(func=replay_scenarios)
+
+    need = groups.add_parser("requirements", help="storage requirements table")
+    need.add_argument("--week1", required=True, help="a Week 1 analysis.json")
+    need.add_argument("--calibration", default="configs/traces/calibration/swe_agent.json")
+    need.add_argument("--out", required=True)
+    need.set_defaults(func=requirements)
+
+    proxy = groups.add_parser("proxy", help="agent-aware prefetch proxy").add_subparsers(
+        required=True
+    )
+    serve = proxy.add_parser("serve")
+    serve.add_argument("--upstream", default="http://127.0.0.1:8000")
+    serve.add_argument("--port", type=int, default=8100)
+    serve.add_argument("--lead", type=float, default=0.5, help="seconds before predicted tool end")
+    serve.add_argument("--no-prefetch", action="store_true", help="relay only, for comparison")
+    serve.set_defaults(func=proxy_serve)
+
+    tiers = groups.add_parser("tiers", help="storage tier timing").add_subparsers(required=True)
+    run = tiers.add_parser("run")
+    run.add_argument("--server", required=True)
+    run.add_argument("--tier", required=True)
+    run.add_argument("--run-id", help="reuse an ID to resume a stopped run")
+    run.add_argument("--results-dir", default="results")
+    run.add_argument("--drop-cache-dir", help="drop this folder's page cache before each read")
+    run.set_defaults(func=tiers_run)
+
+    compare = tiers.add_parser("compare")
+    compare.add_argument("--run", action="append", required=True, help="tier name=run folder")
+    compare.add_argument("--out", required=True)
+    compare.set_defaults(func=tiers_compare)
+
+    storage = groups.add_parser("storage", help="disk baseline").add_subparsers(required=True)
+    base = storage.add_parser("baseline")
+    base.add_argument("--dir", required=True)
+    base.add_argument("--out", required=True)
+    base.add_argument("--size", default="8G")
+    base.add_argument("--runtime", type=int, default=20)
+    base.set_defaults(func=storage_baseline)
+
+    check = groups.add_parser("correctness", help="compare outputs").add_subparsers(required=True)
+    rec = check.add_parser("record")
+    rec.add_argument("--server", required=True)
+    rec.add_argument("--label", required=True)
+    rec.add_argument("--out", required=True)
+    rec.add_argument("--settle", type=float, default=5.0, help="seconds to let saves finish")
+    rec.set_defaults(func=correctness_record)
+
+    cmp_ = check.add_parser("compare")
+    cmp_.add_argument("--baseline", required=True)
+    cmp_.add_argument("--run", action="append", required=True, help="label=results file")
+    cmp_.add_argument("--out", required=True)
+    cmp_.set_defaults(func=correctness_compare)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Notebooks read this through a pipe, where Python would otherwise hold output until exit.
+    sys.stdout.reconfigure(line_buffering=True)
     args = build_parser().parse_args(argv)
     return args.func(args)
 

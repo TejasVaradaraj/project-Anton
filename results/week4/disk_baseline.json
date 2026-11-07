@@ -1,0 +1,28 @@
+{
+  "directory": "/content/fio",
+  "rand_read_1m": {
+    "gbytes_per_s": 4.164687651,
+    "iops": 3971.755649,
+    "latency_p50_us": 3948.544,
+    "latency_p99_us": 5013.504
+  },
+  "rand_read_4k": {
+    "gbytes_per_s": 0.703223053,
+    "iops": 171685.315734,
+    "latency_p50_us": 181.248,
+    "latency_p99_us": 264.192
+  },
+  "seq_read": {
+    "gbytes_per_s": 3.93153098,
+    "iops": 3749.40012,
+    "latency_p50_us": 4145.152,
+    "latency_p99_us": 5341.184
+  },
+  "seq_write": {
+    "gbytes_per_s": 1.484743105,
+    "iops": 1415.961366,
+    "latency_p50_us": 7045.12,
+    "latency_p99_us": 71827.456
+  },
+  "size": "8G"
+}

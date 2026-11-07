@@ -1,0 +1,12 @@
+# An 8 GiB GPU KV cache, about 65k tokens, so filler prompts can evict a prompt within seconds.
+name: a100_small_gpu_only
+model: meta-llama/Llama-3.1-8B-Instruct
+port: 8000
+vllm_args:
+  dtype: bfloat16
+  max-model-len: 32768
+  kv-cache-memory: 8589934592
+  enable-prefix-caching: true
+  enable-prompt-tokens-details: true
+token_id_range: [0, 128000]
+kv_shape: { layers: 32, kv_heads: 8, head_dim: 128, dtype_bytes: 2 }

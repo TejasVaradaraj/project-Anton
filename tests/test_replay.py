@@ -11,7 +11,12 @@ import yaml
 from fake_vllm import FakeVllm
 
 from project_anton.analysis.kv_math import ModelShape
-from project_anton.analysis.replay import analyze_replay, peak_kv_usage, summarize_replay
+from project_anton.analysis.replay import (
+    analyze_replay,
+    counter_changes,
+    peak_kv_usage,
+    summarize_replay,
+)
 from project_anton.harness.replay import (
     ReplaySweep,
     finished_sessions,
@@ -220,6 +225,39 @@ def test_peak_kv_usage_reads_real_metric_name(tmp_path):
     path.write_text("".join(json.dumps(x) + "\n" for x in samples))
     assert peak_kv_usage(path) == 0.3
     assert peak_kv_usage(tmp_path / "missing.jsonl") is None
+
+
+def test_hits_and_misses_are_reported_separately():
+    data = rows(4, 0.1) + rows(2, 30.0)
+    for row in data[4:]:
+        row["cached_tokens"] = 0
+    summary = summarize_replay(pd.DataFrame(data))
+    assert summary["cache_hit"]["n"] == 4
+    assert summary["cache_hit"]["ttft_p50_ms"] == pytest.approx(100)
+    assert summary["cache_miss"]["n"] == 2
+    assert summary["cache_miss"]["ttft_p50_ms"] == pytest.approx(30000)
+
+
+def test_counter_changes_are_measured_from_the_first_sample(tmp_path):
+    path = tmp_path / "m.jsonl"
+    name = 'vllm:external_prefix_cache_hits_total{engine="0"}'
+    samples = [
+        {"t": 1, "metrics": {name: 100.0, "vllm:prefix_cache_hits_total": 5.0}},
+        {"t": 2, "metrics": {name: 350.0, "vllm:prefix_cache_hits_total": 9.0, "vllm:other": 1.0}},
+    ]
+    path.write_text("".join(json.dumps(x) + "\n" for x in samples))
+    assert counter_changes(path) == {"external_prefix_cache_hits": 250.0, "prefix_cache_hits": 4.0}
+    assert counter_changes(tmp_path / "missing.jsonl") == {}
+
+
+def test_cached_mean_and_p10_reveal_eviction_the_median_hides():
+    data = rows(10, 0.1)
+    for row, cached in zip(data, [0, 96, 96, 96, 96, 96, 96, 96, 96, 96], strict=True):
+        row["cached_tokens"] = cached
+    after = summarize_replay(pd.DataFrame(data))["after_tool"]
+    assert after["previous_prompt_cached_p50"] == pytest.approx(0.96)
+    assert after["previous_prompt_cached_mean"] == pytest.approx(0.864)
+    assert after["previous_prompt_cached_p10"] < 0.96
 
 
 # --- Monitoring ---

@@ -1,0 +1,17 @@
+# Same server as a100_llama31_8b, plus LMCache offload to CPU RAM. Settings follow vLLM 0.33.0's
+# examples/disaggregated/lmcache/cpu_offload_lmcache.py, with a larger store for the 167 GB machine.
+name: a100_llama31_8b_lmcache
+model: meta-llama/Llama-3.1-8B-Instruct
+port: 8000
+vllm_args:
+  dtype: bfloat16
+  max-model-len: 32768
+  enable-prefix-caching: true
+  enable-prompt-tokens-details: true
+  kv-transfer-config: '{"kv_connector":"LMCacheConnectorV1","kv_role":"kv_both"}'
+env:
+  LMCACHE_CHUNK_SIZE: "256"
+  LMCACHE_LOCAL_CPU: "True"
+  LMCACHE_MAX_LOCAL_CPU_SIZE: "100" # GB of CPU RAM
+token_id_range: [0, 128000] # IDs from 128000 up are special tokens
+kv_shape: { layers: 32, kv_heads: 8, head_dim: 128, dtype_bytes: 2 }

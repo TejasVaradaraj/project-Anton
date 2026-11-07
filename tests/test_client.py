@@ -146,6 +146,14 @@ def test_cached_tokens_missing_when_server_flag_off():
     assert result.status == "ok" and result.cached_tokens is None
 
 
+def test_unicode_line_separators_in_generated_text_do_not_break_parsing():
+    # A real sweep lost sessions to this, since httpx's aiter_lines splits on these characters.
+    result = run_one(FakeVllm(line_separator_text=True), max_tokens=4)
+    assert result.status == "ok"
+    assert result.completion_tokens == 4
+    assert len(result.chunk_offsets_ns) == 4
+
+
 # --- Failures come back as results ---
 
 

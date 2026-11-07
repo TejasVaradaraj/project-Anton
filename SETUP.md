@@ -20,12 +20,12 @@ own `env.json`, which is the authoritative record for that run.
 |---|---|
 | Kaggle T4 + Qwen2.5-0.5B via vLLM | Works |
 | Kaggle T4 + Llama-3.2-3B | Not run. Dropped from Week 1: Kaggle stays a Qwen test bed, and the A100 does the Llama runs |
-| Colab A100 + Llama-3.1-8B bf16, 32,768 context | Works, Week 1 sweep measured (see README) |
-| LMCache on any platform | Not run yet (Week 3) |
+| Colab A100 + Llama-3.1-8B bf16, 32,768 context | Works, measured in Weeks 1-4 (see README) |
+| LMCache 0.5.6 on Colab A100 | Runs, but restores fail the correctness check (see REPORT.md) |
 | Hugging Face gated model access | Approved and tested |
 | Datadog | Account and API key configured |
 | AWS EC2 SSH | Works |
-| NVMe-oF target + Soft-RoCE on AWS | **Blocked on the tested image** (see AWS) |
+| NVMe-oF target + Soft-RoCE on AWS | **Blocked on the tested image** (see AWS). All modules load in a local Lima VM with Ubuntu 24.04 |
 | Azure | **Blocked**: subscription restrictions stop VM creation |
 
 **iCloud problem on this Mac.** The repo is on an iCloud-synced Desktop, and iCloud marks files in
@@ -53,6 +53,7 @@ The lasting fix is to keep the virtualenv out of iCloud by adding this to `~/.zs
 | CUDA / driver | 13.0 / 580.82.07 |
 | vLLM | 0.33.0 |
 | Compute units/hr | About 8.88 (A100 + High-RAM, shown by Colab on 2026-11-05) |
+| LMCache | 0.5.6 |
 | Model | meta-llama/Llama-3.1-8B-Instruct, bf16 |
 | Max context | 32,768 tokens |
 | GPU KV cache size | 56.3 GiB, 461,216 tokens |
@@ -108,8 +109,8 @@ to AWS if the module test above works. Any Soft-RoCE result stays labeled as emu
 ## Software test results (2026-11-05)
 | Check | Result |
 |---|---|
-| `pytest`, Python 3.14 (macOS) | 182 passed |
-| `pytest`, Python 3.12 (macOS) | 182 passed |
+| `pytest`, Python 3.14 (macOS) | 240 passed, 1 skipped (macOS lacks `posix_fadvise`) |
+| `pytest`, Python 3.12 (macOS) | 240 passed, 1 skipped |
 | `ruff check` | Passed |
 | Fresh clone, notebook's install steps, Python 3.12 | `anton --help` and imports work |
 | Fake server set to 33,333 tokens/s | Pipeline measured 33,099 tokens/s (0.7% off) |
@@ -117,7 +118,8 @@ to AWS if the module test above works. Any Soft-RoCE result stays labeled as emu
 | Notebook's Google Drive and archive cells | **Not run** (results were saved locally and downloaded) |
 | Notebook on Kaggle | **Not run** |
 | GitHub Actions CI | Passed on the Week 1 pull request; Week 2 branch has no pull request yet |
-| Week 2 replay sweep on Colab A100 | Ran: 4 points, 211/211 requests valid, GPU, disk, network and vLLM monitors all recorded |
+| Replay, tier and correctness runs on Colab A100 | Ran. Week 6 and 7 scripts are held back on purpose, and have never run on a GPU |
+| Dockerfile | **Never built** |
 
 These check the software only. The fake server's numbers are not performance measurements.
 

@@ -8,12 +8,14 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.115",
     "httpx>=0.28.1",
     "matplotlib>=3.11.2",
     "numpy>=2.5.4",
     "pandas>=3.1.0",
     "pyarrow>=26.0.1",
     "pyyaml>=6.0.3",
+    "uvicorn>=0.30",
 ]
 
 [project.scripts]
