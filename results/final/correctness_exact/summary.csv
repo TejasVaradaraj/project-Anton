@@ -1,0 +1,10 @@
+setup,phase,prompts,outputs_changed,first_token_logprob_change_median,first_token_logprob_change_max
+gpu_only,cached,15,0,0.0,0.0011
+gpu_only,evicted,15,0,0.0,0.0
+gpu_only,split,15,0,0.0,0.0011
+mp,cached,15,1,0.0,0.0266
+mp,evicted,15,1,0.0,0.0266
+mp,split,15,1,0.0,0.0266
+cpu,cached,15,15,0.2908,2.5598
+cpu,evicted,15,15,6.3754,6.9869
+cpu,split,15,15,6.5801,7.2397

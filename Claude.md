@@ -97,12 +97,12 @@ Week 0 setup is mostly done; SETUP.md has the verified state and the limitations
 - Record the blanks in SETUP.md (versions, Colab units/hr, AWS kernel). LMCache on T4 comes in Week 3.
 - AWS: test an Ubuntu image with `linux-modules-extra-$(uname -r)` for nvmet/nvmet-tcp/rdma_rxe. Paid: ask first.
 
-**The project stopped on purpose on 2026-11-05: REPORT.md has the full state.** With vLLM 0.33.0 and LMCache 0.5.6, restored
-KV caches change model output (in-process and multi-process), with no error. Week 6 and 7 scripts refuse to run until that's
-fixed (ANTON_ALLOW_UNVERIFIED_OFFLOAD). NEXT: repeat the correctness check with real text, then try a known-good version pair.
-The A100 runtime was deleted. Colab can hand out a different GPU, and its accelerator setting can revert to CPU, so check first.
-Reuse the Drive notebook Project-Anton.ipynb. Colab's port 8080 is taken: run `lmcache server` with --http-port 8091. Chrome
-saves downloads to the Desktop on this Mac. Week 5's lab (`scripts/nvmeof_lab.sh`) needs one Lima VM, as two can't reach each other.
+**Finished on 2026-11-07: REPORT.md has the results.** Final runs use vLLM 0.25.1 with LMCache 0.5.1 in multi-process
+mode, the only setup that passed the correctness check. Offload doubled goodput; prefetch didn't help. Offload scripts refuse
+other vLLM versions unless ANTON_ALLOW_UNVERIFIED_OFFLOAD=1. On Colab, use the CLI: `colab new -s a100 --gpu A100 --high-mem`,
+then `scripts/colab_setup.sh`. The CLI can't read Colab Secrets, so get HF_TOKEN onto the runtime from the Project-Anton notebook.
+Open items for Tejasvi: merge PRs, record the talk (docs/talk_outline.md), edit docs/resume_lines.md, decide whether to post
+docs/lmcache_issue_draft.md, make a demo video.
 
 Commands: `uv run pytest`, `uv run ruff check .`, `uv run anton --help`.
 

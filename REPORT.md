@@ -2,143 +2,189 @@
 
 ## Summary
 
-This project set out to measure whether offloading an AI agent's KV cache to cheaper storage, then
-prefetching it back, is worth doing, and how fast that storage must be.
+This project measures whether offloading an AI agent's KV cache to cheaper storage while its tools run,
+then restoring or prefetching it, is worth doing, and how fast the storage must be.
 
-**The project stopped early, on purpose.** With vLLM 0.33.0 and LMCache 0.5.6 on this setup, **restored KV
-caches changed the model's output, and nothing reported an error**. Measuring the speed of offload and
-prefetch further wouldn't mean much until restores are correct, so Weeks 6-7 weren't run on a GPU.
+**Answer, on one A100 80GB with Llama-3.1-8B:**
 
-What did come out of it:
+- **Offload works, once restores are correct.** With LMCache's multi-process mode on vLLM 0.25.1, offload
+  doubled goodput on a cache-starved agent workload and cut post-tool p95 TTFT by about 5x. At 96
+  concurrent agents on the same GPU cache, it kept 3.3x the goodput of GPU-only serving.
+- **Prefetch didn't help.** Warm-ups sent just before a tool finished gave 7-12% lower goodput than plain
+  offload, in four runs with three lead times.
+- **Correctness was the hard part.** On newer versions (vLLM 0.33.0 with LMCache 0.5.6 or 0.5.7), restored
+  caches silently changed the model's output. In-process LMCache on the older pair also fails, but only on
+  prompts that are exact multiples of its 256-token chunk. Nothing reported an error in either case.
+- **Storage needs:** a restore must deliver about 1.2-1.9 GB/s just to beat recomputing. Multi-process
+  delivered 3.3-12.2 GB/s from CPU RAM. NVMe-oF over a real 2-VM AWS network delivered about 0.96 GB/s,
+  which would lose to recomputing.
 
-- A real cliff in GPU-only serving between 64 and 96 agent sessions.
-- Evidence that the cache-hit path isn't a safe proxy for a correct restore.
-- Measured restore speeds, a storage requirements table, and agent session sizes from real runs.
-- A reproducible harness: client, trace replayer, correctness check and system monitor, with 240 tests.
+Everything ran on Colab A100s. Prompts were random token IDs except where real text is noted, and most
+results come from one run.
 
-Everything ran on one A100 80GB with Llama-3.1-8B. Prompts are random token IDs, and each result comes
-from one session unless stated.
+## 1. Correctness: restores must give the same answer
 
-## Main finding: restores change the output
+Each prompt is sent fresh, then again from cache, then evicted and sent again, with greedy decoding. One
+server, so only the cache state differs. A split control sends the prompt with only its whole 256-token
+chunks cached, which is exactly what a correct restore looks like, so it shows normal rounding.
 
-Each prompt was sent fresh, sent again from the prefix cache, then evicted and sent again, with greedy
-decoding. On one server, only the cache state differs, so outputs should match. 12 prompts per setup, from
-1,000 to 30,000 tokens. Two separate GPU-only servers matched on all 36 requests with a logprob
-difference of exactly 0, so the server itself is deterministic.
+Real text from SWE-agent runs, 20 prompts of 1,000-30,000 tokens:
 
-| Setup | Path | Outputs changed | First-token logprob change, median (max) |
-|---|---|---:|---:|
-| GPU only | Evicted, then recomputed | 0 of 12 | 0 (0) |
-| GPU only | Ordinary prefix cache | 3 of 12 | 0.016 (0.037) |
-| LMCache in-process, CPU RAM | Restored | **11 of 12** | **0.675 (3.385)** |
-| LMCache in-process, disk | Restored | **10 of 12** | **0.367 (3.374)** |
-| LMCache multi-process, CPU RAM | Restored | **7 of 12** | 0.070 (3.356) |
-| LMCache multi-process, 60 s before eviction | Restored | **5 of 12** | 0.066 (2.677) |
+| Versions | Path | Outputs changed | First-token logprob change, median (max) | Verdict |
+|---|---|---:|---:|---|
+| vLLM 0.33.0 | GPU only, split control | 2 | 0 (0.062) | Rounding bar |
+| vLLM 0.33.0 + LMCache 0.5.6 | In-process CPU restore | **19** | 0.779 (6.431) | Fails |
+| vLLM 0.33.0 + LMCache 0.5.6 | Multi-process restore | **12** | 0.029 (1.267) | Fails |
+| vLLM 0.33.0 + LMCache 0.5.7 | Multi-process restore | **14** | 0.012 (1.392) | Fails |
+| vLLM 0.25.1 | GPU only, prefix cache | 2 | 0 (0.022) | Baseline |
+| vLLM 0.25.1 + LMCache 0.5.1 | In-process CPU restore | 2 | 0 (0.035) | Passes at these lengths |
+| vLLM 0.25.1 + LMCache 0.5.1 | In-process disk restore | 2 | 0 (0.035) | Passes at these lengths |
+| vLLM 0.25.1 + LMCache 0.5.1 | Multi-process restore | 1 | 0 (0.066) | Passes |
 
-How to read this:
+Prompts that are exact multiples of 256 tokens (15,872, 31,744 and 32,000), 15 prompts:
 
-- **Ordinary prefix caching is the rounding baseline.** It changes some outputs on these prompts, by small
-  amounts. Those prompts appear to have near-tied predictions, so tiny rounding differences can flip a
-  token. That's why outputs alone aren't enough, and the size of the first-token change matters.
-- **Restores go far beyond that.** Single-prompt changes reach about 90 times the baseline's maximum, and
-  the in-process median is about 40 times the baseline's median. Output text is entirely different.
-- **Multi-process mode is better but still fails.** Prompts of 1,000 tokens were all correct, while most
-  failures came at 16,000 and up.
-- **Giving saves 60 seconds didn't fix it**, so a simple save-then-evict timing race isn't the whole cause.
+| Versions | Path | Outputs changed | First-token logprob change, median (max) | Verdict |
+|---|---|---:|---:|---|
+| vLLM 0.25.1 | GPU only, split control | 0 | 0 (0.001) | Baseline |
+| vLLM 0.25.1 + LMCache 0.5.1 | Multi-process restore | 1 | 0 (0.027) | **Passes** |
+| vLLM 0.25.1 + LMCache 0.5.1 | In-process CPU restore | **15** | 6.375 (6.987) | **Fails** |
 
-**The cause isn't confirmed.** The leading lead is
-[LMCache/LMCache#4887](https://github.com/LMCache/LMCache/pull/4887), an open pull request describing copy
-errors between newer vLLM KV layouts and the in-process connector. That wouldn't directly explain the
-multi-process failures. Newer LMCache (0.5.7rc4) couldn't be tested in-process, because it removes a
-module vLLM 0.33.0 imports. It couldn't be tested in multi-process mode either, because that attempt's
-server startup failed on a settings error and I then moved to the stable release.
+- **The in-process failure at exact multiples** reports the whole prompt as cached (31,999 of 32,000
+  tokens) and answers in about 83 ms, as fast as a GPU cache hit. So it seems to skip loading the cache, and
+  even its plain cache-hit request is wrong. That explains the impossible 83 ms restores in the timings.
+- **Random token IDs** gave the same verdicts on the older pair: in-process CPU changed 2 of 12, the same as
+  its prefix cache.
+- **Why the newer versions fail isn't confirmed.** An open LMCache pull request,
+  [LMCache/LMCache#4887](https://github.com/LMCache/LMCache/pull/4887), describes copy errors with newer vLLM
+  KV layouts in-process. It wouldn't directly explain the multi-process failures. LMCache 0.5.7 can't run
+  in-process with vLLM 0.33.0 at all, because it removes a module vLLM imports.
 
-This should be repeated with real text before calling it a general bug. These are random token IDs, which
-are unusually sensitive to small changes, though the ordinary prefix cache acts as a control for that.
+The offload scripts now refuse to run on any vLLM version other than 0.25.1 unless explicitly overridden,
+and all later results use multi-process mode.
 
-Multi-process mode also crashed the vLLM engine under the tier test, with
-`assert req_id in self.requests` in `_update_from_kv_xfer_finished`.
+## 2. Restore speed
 
-## The cliff (Week 3)
+On an 8 GiB GPU cache, vLLM 0.25.1, 5 repeats per length. Restore time is the evicted request's extra time
+over a GPU cache hit.
 
-Calibrated agents arriving at 1 per second, on the full 56 GiB GPU KV cache.
+| Prompt tokens | Recompute (ms) | Multi-process restore (ms) | Delivered (GB/s) | Needed to break even (GB/s) |
+|---:|---:|---:|---:|---:|
+| 1,000 | 55 | 30 | 3.3 | 1.8 |
+| 4,000 | 260 | 62 | 8.1 | 1.9 |
+| 16,000 | 1,350 | 192 | 10.8 | 1.5 |
+| 32,000 | 3,467 | 343 | 12.2 | 1.2 |
 
-| Sessions | Setup | Found in cache | Hit TTFT p50 (ms) | Miss TTFT p50 (ms) | TPOT p50 (ms) | Met targets | Goodput (tokens/s) |
-|---:|---|---:|---:|---:|---:|---:|---:|
-| 64 | GPU only | 98.5% | 218 | 1,503 | 46.8 | 99.1% | 251 |
-| 96 | GPU only | 67.1% | 280 | 33,324 | 101.0 | 49.9% | 69 |
-| 96 | LMCache in-process | 99.4% | 927 | 1 miss | 122.1 | 37.0% | 37 |
+- **Saving barely slows cold requests in multi-process mode:** 3,571 ms against 3,503 ms at 32,000 tokens.
+  In-process saves cost more (3,925 ms), and disk saves far more (12,580 ms).
+- **In-process disk restores barely beat recomputing,** and lose at 4,000 tokens (559 against 313 ms).
+- **On the newer versions, in-process restores ran at about 0.8 GB/s,** slower than recomputing.
 
-Targets are TTFT under 2 s and TPOT under 100 ms. Goodput falls 73% between 64 and 96 sessions, and a turn
-that misses the cache waits about 33 s, far more than the 3.5 s a 32k recompute takes alone. TPOT also
-passes the target at 96 sessions, so GPU compute is running out at the same point.
+Full tables: [`results/final/tiers`](results/final/tiers) and
+[`results/requirements/multi_process_restores.csv`](results/requirements/multi_process_restores.csv).
 
-LMCache keeps nearly every cache at 96 sessions, but its goodput is lower at every load above 16 sessions.
-And Week 4 shows those restores aren't correct, so this isn't a working system to compare with. My
-prediction of a cliff near 32 sessions was wrong: sessions finish and leave, so total context overstates
-what has to stay live at once.
+## 3. Does offload and prefetch help agents?
 
-## Restore speed (Week 4)
+24 calibrated agents on an 8 GiB GPU cache, so caches get evicted during tool pauses. Multi-process offload.
+Goodput counts requests with TTFT under 2 s and TPOT under 100 ms.
 
-Extra time compared with a warm request, on an 8 GiB GPU cache, 5 repeats per length:
+| Scenario | Goodput (tokens/s) | Met targets | Post-tool TTFT p50 / p95 (ms) | Median agent task (s) | Previous prompt cached |
+|---|---:|---:|---:|---:|---:|
+| A: GPU only | 62 | 69.0% | 271 / 9,247 | 217 | 62% |
+| B: Offload | **130** | **96.5%** | 153 / 1,689 | 161 | 99% |
+| B: Offload, repeat | 130 | 95.6% | 156 / 1,883 | 161 | 99% |
+| C: Offload + prefetch, 0.5 s lead | 121 | 92.3% | 156 / 2,347 | 162 | 99% |
+| C: repeat | 118 | 92.1% | 161 / 2,787 | 162 | 99% |
+| C: 2 s lead | 115 | 89.7% | 159 / 3,101 | 162 | 99% |
+| C: 5 s lead | 117 | 91.5% | 159 / 2,511 | 161 | 99% |
+| D: Ideal, large GPU cache | 143 | 100% | 108 / 239 | 159 | 99.8% |
 
-| Prompt tokens | Recompute, GPU only (ms) | In-process CPU restore (ms) | In-process disk restore (ms) |
-|---:|---:|---:|---:|
-| 1,000 | 68 | 133 | 171 |
-| 4,000 | 280 | 608 | 873 |
-| 16,000 | 1,352 | 2,475 | 3,131 |
+- **Offload gets most of the way to ideal.** It doubles goodput and brings task time within 2% of ideal.
+- **Prefetch is consistently a bit worse.** The two B runs agree within 0.3%, and every C run is 7-12% below
+  them. Restores already take only 0.2-0.4 s, so there's little latency left for prefetch to hide.
+- **Why prefetch costs goodput isn't confirmed.** Likely causes are the extra warm-up requests competing for
+  the GPU, and warm-ups pulling caches onto a small GPU cache, pushing out other agents'.
+- **A proxy bug crashed the first prefetch run.** When an agent's real request arrived during a warm-up,
+  the proxy cancelled the warm-up while its cache was loading, and vLLM crashed with
+  `assert req_id in self.requests`. It no longer cancels warm-ups once they're sent. The same assertion
+  crashed an earlier multi-process run, which this may explain.
+- C and D ran on a later A100 session than A and the first B. The repeats of B and C share one session.
 
-- In-process restores delivered about 0.8 GB/s from RAM, and 0.6-0.8 GB/s from disk, which is slower than
-  recomputing. fio read that disk at 3.9 GB/s, so storage wasn't the limit.
-- Saving is costly in-process: a cold 16k request took 1.6x as long with CPU saves and 5.3x with disk saves.
-- **Multi-process mode looked far faster, on very thin evidence.** One 16k restore took 302 ms, about 6.9
-  GB/s, and its cold request took 1,497 ms against 1,394 ms with no offload. The engine crashed soon after,
-  so that's a single sample.
-- 32,000-token prompts were never restored in-process, though vLLM's counter reported a hit. The cause
-  isn't known.
+Tables: [`results/final/scenarios/all_scenarios.csv`](results/final/scenarios/all_scenarios.csv).
 
-## Other results
+## 4. The cliff, with and without offload
 
-- **Week 1:** cached prompts reach the first token up to 33x faster, and cost per token rises with prompt
-  length, so no single prefill rate describes this GPU. `vllm bench serve` agreed within 5%.
-- **Agent traces:** calibrated from 20,008 real SWE-agent runs. Tool outputs are far smaller than the plan
-  assumed, with a median final context of 11,788 tokens. Tool pause times stay assumed: no dataset I could
-  check records them.
-- **Storage requirements:** [`results/requirements`](results/requirements) gives bandwidth, chunk IOPS and
-  latency per session size. For example, a median agent session needs about 1.7 GB/s to break even, and
-  about 17 GB/s to spend only 10% of the time saved on the restore. These are calculated from Week 1
-  timings, assume restores work, and ignore load. A 70B table over assumed prefill rates is a projection.
-- **NVMe-oF:** it ran with real kernel drivers over TCP and Soft-RoCE in a VM on a Mac, inside one VM. So it
-  shows the protocols work, not what a network costs.
+Calibrated agents arriving at 1 per second. Both setups get the same 44 GiB GPU cache, leaving room for the
+multi-process LMCache server's own GPU memory.
+
+| Sessions | Setup | Previous prompt cached | Post-tool TTFT p50 / p95 (ms) | TPOT p50 (ms) | Met targets | Goodput (tokens/s) |
+|---:|---|---:|---:|---:|---:|---:|
+| 32 | GPU only | 99.8% | 119 / 263 | 18 | 100% | 147 |
+| 32 | Offload | 99.8% | 123 / 282 | 18 | 100% | 147 |
+| 48 | GPU only | 98.5% | 167 / 473 | 29 | 99.4% | 214 |
+| 48 | Offload | 99.8% | 164 / 394 | 29 | 100% | 217 |
+| 64 | GPU only | 89.0% | 255 / 8,152 | 50 | 81.0% | 160 |
+| 64 | Offload | 99.7% | 217 / 540 | 43 | 100% | **260** |
+| 80 | GPU only | 58.7% | 874 / 35,140 | 101 | 49.7% | 56 |
+| 80 | Offload | 98.0% | 317 / 3,298 | 59 | 87.5% | **211** |
+| 96 | GPU only | 51.2% | 16,348 / 40,760 | 222 | 36.9% | 40 |
+| 96 | Offload | 94.8% | 548 / 7,489 | 85 | 58.3% | **132** |
+
+- **GPU-only hits a cliff past 48 sessions.** Agents' caches get evicted, misses wait up to 32 s, and
+  recomputing them also slows every other request (TPOT passes 100 ms).
+- **Offload moves the cliff.** It keeps 95-99% of caches and stays fully within targets at 64 sessions. At 96
+  it starts to degrade too, as compute becomes the limit.
+
+Plot: [`results/final/sweep/comparison/cliff.png`](results/final/sweep/comparison/cliff.png).
+
+## 5. Storage requirements
+
+From the final runs: the bandwidth a restore needs so it costs only part of the time it saves. Calculated
+from measured cold and warm TTFT, assuming sequential whole-chunk reads with no queueing.
+
+| Workload | Context (tokens) | KV size (GB) | Time saved (ms) | Break even (GB/s) | Use half the saving (GB/s) | Use 10% of the saving (GB/s) |
+|---|---:|---:|---:|---:|---:|---:|
+| Agent, median session | 11,788 | 1.55 | 950 | 1.6 | 3.3 | 16.3 |
+| Agent, p75 session | 28,335 | 3.71 | 2,927 | 1.3 | 2.5 | 12.7 |
+| Agent, p90 session | 30,337 | 3.98 | 3,187 | 1.2 | 2.5 | 12.5 |
+
+At LMCache's 32 MiB chunks, the median session needs 48-485 chunk reads per second. A 70B table over
+assumed prefill rates is in [`results/requirements`](results/requirements), and it's a projection.
+
+**Against measured storage paths:**
+
+| Path | Read, 32 MiB chunks (GB/s) | Median session restore | Beats recomputing? |
+|---|---:|---:|---|
+| Multi-process LMCache, CPU RAM, same machine | 10.8 (at 16k tokens) | About 0.15 s | Yes, by about 6x |
+| NVMe-oF over TCP, 2 AWS VMs, RAM disk target | 0.96 | About 1.6 s | No |
+| NVMe-oF over Soft-RoCE, same VMs | 0.97 | About 1.7 s | No |
+
+The AWS VMs were the only type this account's free plan allowed (`m7i-flex.large`). One network flow peaked
+at 5 Gbit/s and four reached 12.4 Gbit/s, so the network, not NVMe-oF, set the limit. Soft-RoCE is
+software emulation, so it says nothing about RDMA hardware. No KV traffic was replayed over the network;
+fio read at LMCache's chunk size instead.
 
 ## Roadmap status
 
 | Week | Status |
 |---|---|
-| 1. First vLLM run | Done on A100. Kaggle T4 run dropped by choice |
-| 2. Harness | Done. Datadog push not built |
-| 3. Cliff and CPU offload | Done, but offload results are affected by the correctness failure |
-| 4. Disk, correctness, profiling | Done. This is where the failure was found |
-| 5. Network storage | Partial: protocols run in one local VM, with no real network and no KV I/O replay |
-| 6. Prefetch proxy | Built and tested on a fake server. **Not run on a GPU**, on purpose |
-| 7. Final sweep, requirements | Requirements table built. **Final sweep and TP=2 not run** |
-| 8. Ship | This report and the README. **Dockerfile never built, and no talk or resume update** |
+| 1. First vLLM run | Done |
+| 2. Harness and traces | Done. Datadog push not built (optional) |
+| 3. Cliff and offload | Done, redone on the verified versions |
+| 4. Disk, correctness, profiling | Done, including real text and exact chunk lengths |
+| 5. Network storage | Done on 2 AWS VMs, with no KV traffic replay |
+| 6. Prefetch proxy | Done. Prefetch didn't help |
+| 7. Final sweep and requirements | Done. TP=2 dropped |
+| 8. Ship | Report, README and Dockerfile done. Talk and resume drafts in [`docs`](docs) |
 
 ## Limitations
 
-- One GPU type, one small model, mostly one session, and prompts of random token IDs.
-- Week 3 runs had a client bug that ended some sessions early. Most points lost 0-2 requests, but LMCache at
-  64 sessions sent 13% less load. It's fixed, and the planned re-run didn't happen.
-- Colab is a shared, virtualized machine, and the benchmark client ran on the same machine as the server.
-- Whether disk tier reads reached the disk, instead of the page cache, wasn't confirmed against disk logs.
-
-## What to do next
-
-1. **Repeat the correctness check with real text.** This is cheap, and it decides how strong the claim is.
-2. **Try a vLLM and LMCache version pair known to work together**, starting from what LMCache tests against.
-3. **If it still fails, report it upstream** with `results/diag` and `results/week4/correctness`.
-4. **Only after restores pass, remove the gate** (`ANTON_ALLOW_UNVERIFIED_OFFLOAD` in the scripts) and run
-   `scripts/week6_scenarios.py` and `scripts/week7_final.py`.
+- One GPU type, one small model (8B, not 70B), one run per setting except the prefetch repeats.
+- Most prompts are random token IDs. Real text was used for the correctness checks only.
+- Tool pause times are assumptions. The calibration dataset records no timing.
+- The benchmark client ran on the same shared Colab machine as the server.
+- Restores are verified one request at a time, not under load.
+- Disk-tier reads weren't confirmed against disk logs, so some may have come from the page cache.
+- The verified versions are older than current releases. Newer versions fail the check here.
 
 ## Reproduce
 
@@ -148,14 +194,22 @@ Tests need no GPU:
 uv run pytest
 ```
 
-Correctness check on a GPU machine, with vLLM and LMCache installed:
+On a fresh Colab A100, from the repo root, with a Hugging Face token in
+`/root/.cache/huggingface/token`:
 
 ```bash
-uv run anton server start --config configs/servers/a100_small_cpu.yaml
+bash scripts/colab_setup.sh
 ```
 
 ```bash
-uv run anton correctness record --server configs/servers/a100_small_cpu.yaml --label cpu --out results/check
+PATH=/tmp/old/bin:$PATH HF_HUB_OFFLINE=1 bash scripts/final_runs.sh results/final
 ```
+
+```bash
+PATH=/tmp/old/bin:$PATH HF_HUB_OFFLINE=1 bash scripts/finish_runs.sh results/final
+```
+
+The first runs restore timings, the prefetch comparison and the sweep. The second adds the exact-length
+correctness check and skips anything already finished.
 
 Raw per-request data isn't in git. Each run's `config.json` and `env.json` record its settings and commit.

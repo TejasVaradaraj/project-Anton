@@ -1,0 +1,11 @@
+{
+  "tool_starts": 522,
+  "no_prediction": 25,
+  "warmups_scheduled": 497,
+  "warmups_sent": 478,
+  "warmups_failed": 0,
+  "cancelled_tool_ended_first": 19,
+  "late_still_running": 76,
+  "completed_before_request": 402,
+  "early_by_p50_s": 0.605443936001393
+}
