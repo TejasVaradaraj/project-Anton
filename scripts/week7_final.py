@@ -55,7 +55,6 @@ def main() -> None:
     # room for the 9 GB of GPU memory that the multi-process LMCache server uses.
     for sweep, server in (
         ("final_gpu_only", "configs/servers/a100_final_gpu_only.yaml"),
-        ("final_cpu", "configs/servers/a100_final_cpu.yaml"),
         ("final_mp", "configs/servers/a100_final_mp.yaml"),
     ):
         anton("server", "start", "--config", server)
@@ -77,8 +76,6 @@ def main() -> None:
         "compare",
         "--sweep",
         "final_gpu_only",
-        "--sweep",
-        "final_cpu",
         "--sweep",
         "final_mp",
         "--results-dir",

@@ -1,6 +1,0 @@
-# Final sweep on the verified versions, with one GPU cache size for every setup: in-process LMCache to CPU RAM.
-name: final_cpu
-trace: configs/traces/agent.yaml
-grid:
-  arrival_rate_per_s: [1.0]
-  sessions: [32, 48, 64, 80, 96]
