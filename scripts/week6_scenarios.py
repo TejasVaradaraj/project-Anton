@@ -43,8 +43,10 @@ def wait_for(url: str, timeout_s: float = 60) -> None:
     raise TimeoutError(url)
 
 
-def run_scenario(name: str, server: str, prefetch: bool, results_dir: Path) -> Path:
-    run_id = "scenario_" + name.split()[0]
+def run_scenario(
+    name: str, server: str, prefetch: bool, results_dir: Path, suffix: str = "", lead_s: float = 0.5
+) -> Path:
+    run_id = "scenario_" + name.split()[0] + suffix
     run_dir = results_dir / run_id
     config = f"configs/servers/{server}.yaml"
     anton("server", "start", "--config", config)
@@ -54,6 +56,7 @@ def run_scenario(name: str, server: str, prefetch: bool, results_dir: Path) -> P
         replay += ["--run-id", run_id, "--results-dir", results_dir]
         if prefetch:
             command = [sys.executable, "-m", "project_anton.cli", "proxy", "serve"]
+            command += ["--lead", str(lead_s)]
             proxy = subprocess.Popen(command)
             wait_for(f"{PROXY_URL}/health")
             replay += ["--proxy", PROXY_URL]
@@ -75,21 +78,28 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--results-dir", type=Path, required=True)
     parser.add_argument("--offload", default="a100_small_mp", help="server config for B and C")
+    parser.add_argument("--only", default="ABCD", help="scenario letters to run")
+    parser.add_argument("--suffix", default="", help="added to run IDs, for repeat runs")
+    parser.add_argument("--lead-s", type=float, default=0.5, help="how early warm-ups are sent")
     args = parser.parse_args()
     require_verified_offload()
 
     compare = []
     failed = []
-    for name, server, prefetch in scenarios(args.offload):
+    chosen = [item for item in scenarios(args.offload) if item[0][0] in args.only]
+    for name, server, prefetch in chosen:
         # One crash shouldn't lose the other scenarios. Finished ones are skipped on a rerun.
         try:
-            run_dir = run_scenario(name, server, prefetch, args.results_dir)
+            run_dir = run_scenario(
+                name, server, prefetch, args.results_dir, args.suffix, args.lead_s
+            )
         except subprocess.CalledProcessError as exc:
             print(f"{name} failed: {exc}", file=sys.stderr)
             failed.append(name)
             continue
         compare += ["--run", f"{name}={run_dir}"]
-    anton("replay", "scenarios", *compare, "--out", args.results_dir / "scenarios.csv")
+    out = args.results_dir / f"scenarios{args.suffix}.csv"
+    anton("replay", "scenarios", *compare, "--out", out)
     if failed:
         sys.exit(f"Failed: {', '.join(failed)}")
 
