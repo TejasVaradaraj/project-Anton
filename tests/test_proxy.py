@@ -7,6 +7,8 @@ import httpx
 import pytest
 import uvicorn
 from fake_vllm import FakeVllm
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from project_anton.analysis.kv_math import ModelShape
 from project_anton.harness.replay import run_replay
@@ -158,3 +160,42 @@ def test_helper_endpoints_respond(path):
                     return (await client.get(path)).status_code
 
     assert asyncio.run(go()) == 200
+
+
+def test_real_request_does_not_abort_a_warmup_in_flight():
+    # Aborting a request while its KV cache loads crashed the vLLM engine in a real run.
+    warmup_ended = []
+    app = FastAPI()
+
+    @app.post("/v1/completions")
+    async def completions(request: Request) -> JSONResponse:
+        body = await request.json()
+        if body["max_tokens"] == 1:
+            await asyncio.sleep(0.4)
+            warmup_ended.append(await request.is_disconnected())
+        return JSONResponse({"choices": [{"text": "x"}]})
+
+    async def go():
+        port = free_port()
+        upstream = uvicorn.Server(uvicorn.Config(app, port=port, log_level="error"))
+        upstream_task = asyncio.create_task(upstream.serve())
+        while not upstream.started:
+            await asyncio.sleep(0.01)
+        async with RunningProxy(f"http://127.0.0.1:{port}") as proxy:
+            async with httpx.AsyncClient(base_url=proxy.url) as client:
+                body = {"model": "m", "prompt": [1, 2], "max_tokens": 4}
+                headers = {"X-Agent-Id": "a"}
+                for _ in range(MIN_HISTORY + 1):
+                    await client.post("/tool_start", json={"agent_id": "a", "tool": "read"})
+                    await asyncio.sleep(0.02)
+                    await client.post("/v1/completions", json=body, headers=headers)
+                await asyncio.sleep(0.6)
+                stats = (await client.get("/stats")).json()
+        upstream.should_exit = True
+        await upstream_task
+        return stats
+
+    stats = asyncio.run(go())
+    assert stats["late_still_running"] >= 1
+    assert warmup_ended
+    assert not any(warmup_ended)
