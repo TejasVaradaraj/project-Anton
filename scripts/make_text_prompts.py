@@ -29,13 +29,14 @@ def main() -> None:
     parser.add_argument("--tokenizer", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--per-length", type=int, default=5)
+    parser.add_argument("--lengths", type=int, nargs="+", default=list(LENGTHS))
     args = parser.parse_args()
 
     tokenizer = Tokenizer.from_file(str(args.tokenizer))
     prompts = build_text_prompts(
         trajectory_texts(args.parquet),
         lambda text: tokenizer.encode(text).ids,
-        LENGTHS,
+        args.lengths,
         args.per_length,
     )
     args.out.parent.mkdir(parents=True, exist_ok=True)
